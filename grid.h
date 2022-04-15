@@ -12,14 +12,14 @@
 #include <algorithm>
 
 struct grid_t {
-	glm::ivec3 cellPerAxis = glm::ivec3(100,100,100);
-	glm::vec3 cellSize = glm::vec3(1.0,1.0,1.0); // gridSize / cellPerAxis;
-	int dnbr = 100000;
+	glm::ivec3 cellPerAxis;
+	glm::vec3 cellSize; // gridSize / cellPerAxis;
+	int dnbr;
 };
 
 class Grid {
 public:
-	Grid();
+	Grid(grid_t grid_settings);
 	~Grid();
 	void computeGrid(glm::vec3* pos, glm::vec3 offset);
 	template<typename Functor>
@@ -78,8 +78,9 @@ __global__ void print_int_vector(int n, int* vec, char* msg) {
 	}
 }
 
-Grid::Grid() {
-	h_gridp = new grid_t;
+Grid::Grid(grid_t grid_settings) {
+	h_gridp = new grid_t[1];
+	h_gridp[0] = grid_settings;
 	const int nbCell = h_gridp->cellPerAxis.x * h_gridp->cellPerAxis.y * h_gridp->cellPerAxis.z;
 	cudaMalloc(&this->start, sizeof(int) * nbCell);
 	cudaMalloc(&this->stop, sizeof(int) * nbCell);

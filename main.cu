@@ -6,17 +6,21 @@
 
 #include "particleSys.h"
 #include "BoidsParticleSys.h"
+#include "sphParticleSys.h"
 #include "particleSysRenderer.h"
 
-#define NUM_PARTICLES 100000
+#define NUM_PARTICLES 10000
 #define TWOPI 6.2831853072
 
 struct MyApp : public Application {
-	BoidsParticleSys psys;
+	SphParticleSys psys;
 	ParticleSystemRenderer psr;
 	bool run_simulation = true;
 
-	MyApp(int width, int height, std::string title) : Application(width, height, std::move(title)), psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0)), psr(&psys) {}
+	MyApp(int width, int height, std::string title) : Application(width, height, std::move(title)), 
+		//psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), { 0.1,0.5,0.7,5.5,2.5,5.0,15.0 }), 
+		psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), { 20.0 }),
+		psr(&psys) {}
 	void run() {
 		Timer dtTimer;
 		while (!glfwWindowShouldClose(window)) {
@@ -41,21 +45,21 @@ struct MyApp : public Application {
 			ImGui::Checkbox("Show simulation box", &psr.show_cube);
 			ImGui::Text("Simulation");
 			ImGui::Checkbox("Running simulation", &run_simulation);
-			bool boids_changed = false;
-			boids_changed |= ImGui::DragFloat("Radius of separation", &psys.h_bss->RADA, 0.1, 0.0, 1.0);
-			boids_changed |= ImGui::DragFloat("Radius of cohesion", &psys.h_bss->RADB, 0.1, 0.0, 1.0);
-			boids_changed |= ImGui::DragFloat("Radius of alignement", &psys.h_bss->RADC, 0.1, 0.0, 1.0);
-			boids_changed |= ImGui::DragFloat("Strength of separation", &psys.h_bss->A_FORCE, 0.1, 0.1, 10.0);
-			boids_changed |= ImGui::DragFloat("Strength of cohesion", &psys.h_bss->B_FORCE, 0.1, 0.1, 10.0);
-			boids_changed |= ImGui::DragFloat("Strength of alignement", &psys.h_bss->C_FORCE, 0.1, 0.1, 10.0);
-			boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 1.0, 1.0, 40.0);
+			//bool boids_changed = false;
+			//boids_changed |= ImGui::DragFloat("Radius of separation", &psys.h_bss->RADA, 0.1, 0.0, 50.0);
+			//boids_changed |= ImGui::DragFloat("Radius of cohesion",   &psys.h_bss->RADB, 0.1, 0.0, 50.0);
+			//boids_changed |= ImGui::DragFloat("Radius of alignement", &psys.h_bss->RADC, 0.1, 0.0, 50.0);
+			//boids_changed |= ImGui::DragFloat("Strength of separation", &psys.h_bss->A_FORCE, 0.1, 0.1, 10.0);
+			//boids_changed |= ImGui::DragFloat("Strength of cohesion",   &psys.h_bss->B_FORCE, 0.1, 0.1, 10.0);
+			//boids_changed |= ImGui::DragFloat("Strength of alignement", &psys.h_bss->C_FORCE, 0.1, 0.1, 10.0);
+			//boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 1.0, 1.0, 40.0);
 			ImGui::End();
 
 			ImGui::Render();
 
-			if (boids_changed) {
-				cudaMemcpy(psys.d_bss, psys.h_bss, sizeof(boids_sim_settings), cudaMemcpyHostToDevice);
-			}
+			//if (boids_changed) {
+			//	cudaMemcpy(psys.d_bss, psys.h_bss, sizeof(boids_sim_settings), cudaMemcpyHostToDevice);
+			//}
 
 			LOG_TIMING("ImGui tab setting: {} ms", timer.swap_time());
 

@@ -50,7 +50,6 @@ struct ParticleSystemRenderer {
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		
 		float quadVertices[] = {
-			// positions   
 			-0.05f,  0.05f,
 			 0.05f, -0.05f,
 			-0.05f, -0.05f,
@@ -143,6 +142,13 @@ struct ParticleSystemRenderer {
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		glBindVertexArray(0);
 		GLCHECKERR();
+	}
+
+	~ParticleSystemRenderer() {
+		glDeleteVertexArrays(1, &vao_psys);
+		glDeleteVertexArrays(1, &vao_cube);
+		glDeleteBuffers(1, &vbo_quad);
+		glDeleteBuffers(1, &vbo_cube);
 	}
 
 	void renderps(int width, int height) {

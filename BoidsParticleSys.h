@@ -16,7 +16,7 @@ struct boids_sim_settings {
 	float MAX_VEL = 15.0;
 };
 
-struct calcForces_functor {
+struct boids_neighbor_functor {
 	void resetForces() {
 		cudaMemset(separation, 0.0, numVertices * sizeof(glm::vec3));
 		cudaMemset(cohesion, 0.0, numVertices * sizeof(glm::vec3));
@@ -28,7 +28,7 @@ struct calcForces_functor {
 	__device__ void operator()(const int& i, const int& j, glm::vec3 dist_vec, double dist) {
 		//if(i==1234)printf("Calc: %d %d %lf\n", i, j,dist);
 		if (dist <= d_bss->RADA*d_bss->RADA) {
-			separation[i] += dist_vec;
+			separation[i] -= dist_vec;
 			num_A[i] += 1;
 		}
 		if (dist <= d_bss->RADB* d_bss->RADB) {
@@ -112,7 +112,7 @@ struct BoidsParticleSys : public ParticleSys {
 
 	boids_sim_settings* d_bss;
 	boids_sim_settings* h_bss;
-	calcForces_functor cff;
+	boids_neighbor_functor cff;
 
 	glm::vec3 *d_vel, *h_vel;
 	glm::vec3 *d_pos, *h_pos;
@@ -122,16 +122,15 @@ struct BoidsParticleSys : public ParticleSys {
 
 	glm::vec3 *d_separation, *d_cohesion, *d_alignement;
 	int *d_num_A, *d_num_B, *d_num_C;
-	double *h_radius, *d_radius;
-
+	
 	struct cudaGraphicsResource* vbo_pos_cuda, * vbo_vel_cuda;
 
-	BoidsParticleSys(int numParticles, glm::vec3 min, glm::vec3 max) : ParticleSys(numParticles), h_min(min), h_max(max), m_grid()
+	BoidsParticleSys(int numParticles, glm::vec3 min, glm::vec3 max, boids_sim_settings bss) : ParticleSys(numParticles), h_min(min), h_max(max), 
+		m_grid({glm::ivec3(2,2,2),glm::vec3(50.0,50.0,50.0),numParticles})
 	{
 		h_pos = new glm::vec3[numParticles];
 		h_vel = new glm::vec3[numParticles];
-		h_radius = new double[numParticles];
-
+		
 		std::random_device dev;
 		std::mt19937 rng(dev());
 		std::uniform_real_distribution<> distx(h_min.x, h_max.x);
@@ -154,6 +153,7 @@ struct BoidsParticleSys : public ParticleSys {
 
 		cudaMalloc((void**)&d_bss, sizeof(boids_sim_settings));
 		h_bss = new boids_sim_settings[1];
+		h_bss[0] = bss;
 		cudaMemcpy(d_bss, h_bss, sizeof(boids_sim_settings), cudaMemcpyHostToDevice);
 
 		cudaMemset(d_separation, 0.0, numParticles * sizeof(glm::vec3));
@@ -191,6 +191,25 @@ struct BoidsParticleSys : public ParticleSys {
 		LOG_EVENT("Boids particle system initialized with {} particles", numParticles);
 	}
 
+	~BoidsParticleSys() {
+		delete[] h_pos;
+		delete[] h_vel;
+
+		cudaFree(d_separation);
+		cudaFree(d_cohesion);
+		cudaFree(d_alignement);
+			
+		cudaFree(d_num_A);
+		cudaFree(d_num_B);
+		cudaFree(d_num_C);
+			
+		cudaFree(d_bss);
+		delete[] h_bss;
+
+		cudaFree(d_min);
+		cudaFree(d_max);
+	}
+
 	void update(float dt) override {
 		size_t bytes = 0;
 		gpuErrchk(cudaGraphicsMapResources(1, &vbo_pos_cuda, 0));
@@ -209,7 +228,7 @@ struct BoidsParticleSys : public ParticleSys {
 		m_grid.computeGrid(d_pos, offset);
 		cudaDeviceSynchronize();
 		cff.vel = d_vel;
-		m_grid.apply_f_frnn<calcForces_functor>(cff, d_pos, glm::max(glm::max(h_bss->RADA, h_bss->RADB), h_bss->RADC));
+		m_grid.apply_f_frnn<boids_neighbor_functor>(cff, d_pos, glm::max(glm::max(h_bss->RADA, h_bss->RADB), h_bss->RADC));
 		cudaDeviceSynchronize();
 		LOG_TIMING("Grid update: {}", grid_timer.swap_time());
 
