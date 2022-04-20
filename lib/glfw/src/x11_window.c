@@ -487,16 +487,16 @@ static unsigned int decodeUTF8(const char** s)
 static char* convertLatin1toUTF8(const char* source)
 {
     size_t size = 1;
-    const char* psys_sp;
+    const char* sp;
 
-    for (psys_sp = source;  *psys_sp;  psys_sp++)
-        size += (*psys_sp & 0x80) ? 2 : 1;
+    for (sp = source;  *sp;  sp++)
+        size += (*sp & 0x80) ? 2 : 1;
 
     char* target = calloc(size, 1);
     char* tp = target;
 
-    for (psys_sp = source;  *psys_sp;  psys_sp++)
-        tp += encodeUTF8(tp, *psys_sp);
+    for (sp = source;  *sp;  sp++)
+        tp += encodeUTF8(tp, *sp);
 
     return target;
 }

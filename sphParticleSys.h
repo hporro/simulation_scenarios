@@ -235,7 +235,7 @@ struct SphParticleSys : public ParticleSys {
 		Timer grid_timer;
 
 		glm::vec3 offset(50.0, 50.0, 50.0);
-		m_grid.computeGrid(d_pos, offset);
+		m_grid.update(d_pos, offset);
 		cudaDeviceSynchronize();
 		
 		d_func.vel = d_vel;

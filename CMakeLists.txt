@@ -35,3 +35,6 @@ target_compile_options(main PRIVATE -Wall)
 target_include_directories(main PRIVATE lib/spdlog/include lib/imgui include)
 
 add_executable(playground playground.cu)
+target_link_libraries(playground
+	PRIVATE glm
+)

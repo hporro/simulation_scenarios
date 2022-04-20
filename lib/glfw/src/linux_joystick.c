@@ -250,10 +250,10 @@ static void closeJoystick(_GLFWjoystick* js)
 
 // Lexically compare joysticks by name; used by qsort
 //
-static int compareJoysticks(const void* fp, const void* psys_sp)
+static int compareJoysticks(const void* fp, const void* sp)
 {
     const _GLFWjoystick* fj = fp;
-    const _GLFWjoystick* sj = psys_sp;
+    const _GLFWjoystick* sj = sp;
     return strcmp(fj->linjs.path, sj->linjs.path);
 }
 

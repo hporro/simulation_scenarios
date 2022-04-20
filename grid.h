@@ -17,11 +17,10 @@ struct grid_t {
 	int dnbr;
 };
 
-class Grid {
-public:
+struct Grid {
 	Grid(grid_t grid_settings);
 	~Grid();
-	void computeGrid(glm::vec3* pos, glm::vec3 offset);
+	void update(glm::vec3* pos, glm::vec3 offset);
 	template<typename Functor>
 	void apply_f_frnn(Functor f, glm::vec3* pos, const float rad);
 
@@ -114,7 +113,7 @@ void swap(T** r, T** s) {
 }
 
 
-void Grid::computeGrid(glm::vec3* pos, glm::vec3 offset) {
+void Grid::update(glm::vec3* pos, glm::vec3 offset) {
 	const int nbCell = h_gridp->cellPerAxis.x * h_gridp->cellPerAxis.y* h_gridp->cellPerAxis.z;
 	// find particle position in grid
 	gcalcHash <<<h_gridp->dnbr /1024+1,1024>>> (hash, partId, pos, d_gridp, offset);
