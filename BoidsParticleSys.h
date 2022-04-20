@@ -1,6 +1,7 @@
 #pragma once
 
 #include "particleSys.h"
+#include "helper.cuh"
 #include "grid.h"
 #include <algorithm>
 
@@ -24,15 +25,16 @@ struct boids_neighbor_functor {
 		cudaMemset(num_A, 0, numVertices * sizeof(int));
 		cudaMemset(num_B, 0, numVertices * sizeof(int));
 		cudaMemset(num_C, 0, numVertices * sizeof(int));
+		cudaMemset(vel, 0, numVertices * sizeof(glm::vec3));
 	}
 	__device__ void operator()(const int& i, const int& j, glm::vec3 dist_vec, double dist) {
-		//if(i==1234)printf("Calc: %d %d %lf\n", i, j,dist);
+		//printf("Calc: %d %d %lf\n", i, j,dist);
 		if (dist <= d_bss->RADA*d_bss->RADA) {
-			separation[i] -= dist_vec;
+			separation[i] += dist_vec;
 			num_A[i] += 1;
 		}
 		if (dist <= d_bss->RADB* d_bss->RADB) {
-			cohesion[i] += dist_vec;
+			cohesion[i] -= dist_vec;
 			num_B[i] += 1;
 		}
 		if (dist <= d_bss->RADC* d_bss->RADC) {
@@ -48,19 +50,6 @@ struct boids_neighbor_functor {
 	int *num_A, *num_B, *num_C;
 	boids_sim_settings *d_bss;
 };
-
-__device__ float clamp(float val, float min, float max) {
-	if (val < min)return min;
-	if (val > max)return max;
-	return val;
-}
-
-__device__ glm::vec3 operator*(glm::vec3 v, float a) {
-	return glm::vec3(v.x*a,v.y*a,v.z*a);
-}
-__device__ glm::vec3 operator/(glm::vec3 v, float a) {
-	return glm::vec3(v.x/a,v.y/a,v.z/a);
-}
 
 __global__ void move_boids_w_walls(int numParticles, glm::vec3* pos, glm::vec3* vel, glm::vec3* min, glm::vec3* max, float dt,
 	glm::vec3 *separation, glm::vec3 *cohesion, glm::vec3 *alignement, int *num_A, int *num_B, int *num_C, boids_sim_settings* bss) {
@@ -140,7 +129,7 @@ struct BoidsParticleSys : public ParticleSys {
 
 		for (int i = 0; i < numParticles; i++) {
 			h_pos[i] = glm::vec3(distx(rng), disty(rng), distz(rng));
-			h_vel[i] = glm::vec3(dist01(rng), dist01(rng), dist01(rng));
+			h_vel[i] = glm::vec3(0.0);
 		}
 
 		cudaMalloc((void**)&d_separation, numParticles * sizeof(glm::vec3));

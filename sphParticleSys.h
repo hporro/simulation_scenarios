@@ -1,12 +1,15 @@
 #pragma once
 
 #include "particleSys.h"
+#include "helper.cuh"
 #include "grid.h"
 #include <algorithm>
 
 struct sph_sim_settings {
 	float rad;
 	float viscosity;
+	float rho0;
+	float k; // pressure coeficient
 };
 
 __device__ float smoothing_kernel(glm::vec3 r, float h) {
@@ -16,66 +19,76 @@ __device__ float smoothing_kernel(glm::vec3 r, float h) {
 	else return 2*(1-q)*(1-q)*(1-q);
 }
 
+__device__ glm::vec3 D_smoothing_kernel(glm::vec3 r, float h) {
+	float q = glm::length(r) / h;
+	if (q < 0 || q>1) return glm::vec3(0);
+	else if (q <= 0.5) return (6 * r / (h*h)) * (3 * q - 2);
+	else return -6 * (1 - q) * (1 - q) * r / (h * glm::length(r));
+}
+
 struct sph_density_functor {
 	void resetVariables() {
-		cudaMemset(rho, 0.0, numParticles * sizeof(glm::vec3));
+		cudaMemset(rho, 0.0, numParticles * sizeof(float));
 		cudaMemset(f_viscosity, 0.0, numParticles * sizeof(glm::vec3));
 		cudaMemset(f_pressure, 0.0, numParticles * sizeof(glm::vec3));
 		cudaMemset(v_guess, 0.0, numParticles * sizeof(glm::vec3));
+		cudaMemset(f_external, 0.0, numParticles * sizeof(glm::vec3));
+		cudaMemset(pressure, 0.0, numParticles * sizeof(glm::vec3));
 	}
 	__device__ void operator()(const int& i, const int& j, glm::vec3 dist_vec, double dist) {
-		rho[i] += 1 * smoothing_kernel(dist_vec, d_bss->rad);
+		rho[i] += smoothing_kernel(dist_vec, d_bss->rad);
+		//printf("i: %d rho[i]: %f\n", i, rho[i]);
 	}
 	int numParticles;
 
 	// this class dont own this stuff
 	glm::vec3* vel;
-	glm::vec3 *rho, *f_viscosity, *f_pressure, *v_guess;
+	float* rho;
+	glm::vec3 *f_viscosity, *f_pressure, *v_guess, *f_external, *pressure;
 	sph_sim_settings* d_bss;
 };
 struct sph_viscosity_functor {
 	__device__ void operator()(const int& i, const int& j, glm::vec3 dist_vec, double dist) {
-		//f_viscosity[i] = - (1/rho[j])*(A[i]-A[j])*(2*)
+		glm::vec3 lap_V_i = -(1 / rho[j]) * (vel[i] - vel[j]) * 2 * (glm::length(D_smoothing_kernel(dist_vec, d_bss->rad))) / glm::length(dist_vec);
+		f_viscosity[i] += d_bss->viscosity * lap_V_i;
 	}
 	int numParticles;
 
 	// this class dont own this stuff
 	glm::vec3* vel;
-	glm::vec3* rho, * f_viscosity, * f_pressure, * v_guess;
+	float *rho;
+	glm::vec3 *f_viscosity, *f_pressure, *v_guess, *f_external, *pressure;
 	sph_sim_settings* d_bss;
 };
 struct sph_pressure_functor {
-	__device__ void operator()(const int& i, const int& j, glm::vec3 dist_vec, double dist) {}
+	__device__ void operator()(const int& i, const int& j, glm::vec3 dist_vec, double dist) {
+		float p_i = d_bss->k * (rho[i] - d_bss->rho0); // state equation
+		float p_j = d_bss->k * (rho[j] - d_bss->rho0); // state equation
+		glm::vec3 grad_P = ((p_i)/(rho[i]*rho[i])+(p_j)/(rho[j]*rho[j])) * D_smoothing_kernel(dist_vec,d_bss->rad);
+		f_pressure[i] += -grad_P;
+	}
 	int numParticles;
 
 	// this class dont own this stuff
 	glm::vec3* vel;
-	glm::vec3* rho, * f_viscosity, * f_pressure, * v_guess;
+	float *rho;
+	glm::vec3 *f_viscosity, *f_pressure, *v_guess, *f_external, *pressure;
 	sph_sim_settings* d_bss;
 };
 
-__global__ void move_sph_w_walls(int numParticles, glm::vec3* pos, glm::vec3* vel, glm::vec3* min, glm::vec3* max, float dt, sph_sim_settings* bss) {
+__global__ void move_sph_w_walls(int numParticles, glm::vec3* pos, glm::vec3* vel, glm::vec3* min, glm::vec3* max, float dt, sph_sim_settings* bss, glm::vec3* f_viscosity, glm::vec3 *f_external, glm::vec3 *f_pressure) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i < numParticles) {
+		
+		glm::vec3 v_guess = vel[i] + dt * (f_viscosity[i] + f_external[i]);
+		vel[i] = v_guess + dt * (f_pressure[i]);
 
-		//if (num_A[i] > 0)separation[i] = (separation[i] * bss->A_FORCE) / (float)num_A[i];
-		//if (num_B[i] > 0)cohesion[i] = (cohesion[i] * bss->B_FORCE) / (float)num_B[i];
-		//if (num_C[i] > 0)alignement[i] = (alignement[i] * bss->C_FORCE) / (float)num_C[i];
-		//
-		//glm::vec3 acel = separation[i] + cohesion[i] + alignement[i];
-		//
-		//vel[i] += dt * acel;
-		//
-		//vel[i].x = clamp(vel[i].x, -bss->MAX_VEL, bss->MAX_VEL);
-		//vel[i].y = clamp(vel[i].y, -bss->MAX_VEL, bss->MAX_VEL);
-		//vel[i].z = clamp(vel[i].z, -bss->MAX_VEL, bss->MAX_VEL);
-
-		if (pos[i].x + dt * vel[i].x > max[0].x)vel[i].x *= -1.0;
-		if (pos[i].y + dt * vel[i].y > max[0].y)vel[i].y *= -1.0;
-		if (pos[i].z + dt * vel[i].z > max[0].z)vel[i].z *= -1.0;
-		if (pos[i].x + dt * vel[i].x < min[0].x)vel[i].x *= -1.0;
-		if (pos[i].y + dt * vel[i].y < min[0].y)vel[i].y *= -1.0;
-		if (pos[i].z + dt * vel[i].z < min[0].z)vel[i].z *= -1.0;
+		if (pos[i].x + dt * vel[i].x > max[0].x)vel[i].x=0;
+		if (pos[i].y + dt * vel[i].y > max[0].y)vel[i].y=0;
+		if (pos[i].z + dt * vel[i].z > max[0].z)vel[i].z=0;
+		if (pos[i].x + dt * vel[i].x < min[0].x)vel[i].x=0;
+		if (pos[i].y + dt * vel[i].y < min[0].y)vel[i].y=0;
+		if (pos[i].z + dt * vel[i].z < min[0].z)vel[i].z=0;
 
 		pos[i] += dt * vel[i];
 	}
@@ -98,12 +111,13 @@ struct SphParticleSys : public ParticleSys {
 	Grid m_grid;
 
 	// simulation specific variables
-	glm::vec3* d_rho, *d_f_viscosity, *d_f_pressure, *d_v_guess;
+	float* d_rho;
+	glm::vec3 *d_f_viscosity, *d_f_pressure, *d_v_guess, *d_f_external, *d_pressure;
 
 	struct cudaGraphicsResource* vbo_pos_cuda, * vbo_vel_cuda;
 
 	SphParticleSys(int numParticles, glm::vec3 min, glm::vec3 max, sph_sim_settings bss) : ParticleSys(numParticles), h_min(min), h_max(max),
-		m_grid({ glm::ivec3(2,2,2),glm::vec3(50.0,50.0,50.0),numParticles})
+		m_grid({ glm::ivec3(20,20,20),glm::vec3(5.0,5.0,5.0),numParticles})
 	{
 		h_pos = new glm::vec3[numParticles];
 		h_vel = new glm::vec3[numParticles];
@@ -114,11 +128,10 @@ struct SphParticleSys : public ParticleSys {
 		std::uniform_real_distribution<> distx(h_min.x, h_max.x);
 		std::uniform_real_distribution<> disty(h_min.x, h_max.x);
 		std::uniform_real_distribution<> distz(h_min.x, h_max.x);
-		std::uniform_real_distribution<> dist01(-3.0, 3.0); // 3 m/s
 
 		for (int i = 0; i < numParticles; i++) {
 			h_pos[i] = glm::vec3(distx(rng), disty(rng), distz(rng));
-			h_vel[i] = glm::vec3(dist01(rng), dist01(rng), dist01(rng));
+			h_vel[i] = glm::vec3(0.0);
 		}
 
 		cudaMalloc((void**)&d_bss, sizeof(sph_sim_settings));
@@ -126,18 +139,19 @@ struct SphParticleSys : public ParticleSys {
 		h_bss[0] = bss;
 		cudaMemcpy(d_bss, h_bss, sizeof(sph_sim_settings), cudaMemcpyHostToDevice);
 
-		cudaMalloc((void**)&d_rho, numParticles * sizeof(glm::vec3));
+		cudaMalloc((void**)&d_rho, numParticles * sizeof(float));
 		cudaMalloc((void**)&d_f_viscosity, numParticles * sizeof(glm::vec3));
 		cudaMalloc((void**)&d_f_pressure, numParticles * sizeof(glm::vec3));
 		cudaMalloc((void**)&d_v_guess, numParticles * sizeof(glm::vec3));
+		cudaMalloc((void**)&d_f_external, numParticles * sizeof(glm::vec3));
+		cudaMalloc((void**)&d_pressure, numParticles * sizeof(glm::vec3));
 
-		cudaMemset(d_rho        , 0.0, numParticles * sizeof(glm::vec3));
+		cudaMemset(d_rho        , 0.0, numParticles * sizeof(float));
 		cudaMemset(d_f_viscosity, 0.0, numParticles * sizeof(glm::vec3));
 		cudaMemset(d_f_pressure , 0.0, numParticles * sizeof(glm::vec3));
 		cudaMemset(d_v_guess    , 0.0, numParticles * sizeof(glm::vec3));
-		//cudaMemset(d_num_A, 0, numParticles * sizeof(int));
-		//cudaMemset(d_num_B, 0, numParticles * sizeof(int));
-		//cudaMemset(d_num_C, 0, numParticles * sizeof(int));
+		cudaMemset(d_f_external , 0.0, numParticles * sizeof(glm::vec3));
+		cudaMemset(d_pressure   , 0.0, numParticles * sizeof(glm::vec3));
 
 		cudaMalloc((void**)&d_min, sizeof(glm::vec3));
 		cudaMalloc((void**)&d_max, sizeof(glm::vec3));
@@ -149,6 +163,8 @@ struct SphParticleSys : public ParticleSys {
 		d_func.f_viscosity = d_f_viscosity;
 		d_func.f_pressure = d_f_pressure;
 		d_func.v_guess = d_v_guess;
+		d_func.f_external = d_f_external;
+		d_func.pressure = d_pressure;
 		d_func.d_bss = d_bss;
 
 		v_func.numParticles = numParticles;
@@ -156,6 +172,8 @@ struct SphParticleSys : public ParticleSys {
 		v_func.f_viscosity = d_f_viscosity;
 		v_func.f_pressure = d_f_pressure;
 		v_func.v_guess = d_v_guess;
+		v_func.f_external = d_f_external;
+		v_func.pressure = d_pressure;
 		v_func.d_bss = d_bss;
 
 		p_func.numParticles = numParticles;
@@ -163,6 +181,8 @@ struct SphParticleSys : public ParticleSys {
 		p_func.f_viscosity = d_f_viscosity;
 		p_func.f_pressure = d_f_pressure;
 		p_func.v_guess = d_v_guess;
+		p_func.f_external = d_f_external;
+		p_func.pressure = d_pressure;
 		p_func.d_bss = d_bss;
 
 
@@ -229,7 +249,7 @@ struct SphParticleSys : public ParticleSys {
 		cudaDeviceSynchronize();
 		LOG_TIMING("Grid update: {}", grid_timer.swap_time());
 
-		move_sph_w_walls << <numBlocks + 1, blocksize >> > (numParticles, d_pos, d_vel, d_min, d_max, dt, d_bss);
+		move_sph_w_walls << <numBlocks + 1, blocksize >> > (numParticles, d_pos, d_vel, d_min, d_max, dt, d_bss, d_f_viscosity, d_f_external, d_f_pressure);
 		cudaDeviceSynchronize();
 		LOG_TIMING("Integration: {}", grid_timer.swap_time());
 

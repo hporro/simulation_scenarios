@@ -66,7 +66,7 @@ __global__ void gfindCellBounds(int* start, int* stop, const int* __restrict__ h
 		atomicMin(&start[hash[idx]], idx);
 		atomicMax(&stop[hash[idx]], idx);
 
-		pos_sorted[idx] = pos[index[idx]];
+		pos_sorted[idx] = pos[index[idx]] + offset;
 	}
 
 }
@@ -173,6 +173,7 @@ __global__ void apply_f_frnn_kernel(Functor f, const glm::vec3* __restrict__ pos
 				for (int c = -1; c <= 1; c++) {
 					glm::ivec3 neighboring_cell = pl + glm::ivec3(a, b, c);
 					int current = ggetGridCellHash(neighboring_cell, dgrid);
+					//printf("i: %d Current: %d actual: %d\n", idx, current, ggetGridCellHash(pl, dgrid));
 					if (current < 0) continue;
 					if (current >= nbCell) continue;
 					//printf("i: %d current: %d\n", idx, current);
