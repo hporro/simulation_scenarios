@@ -117,7 +117,7 @@ struct SphParticleSys : public ParticleSys {
 	struct cudaGraphicsResource* vbo_pos_cuda, * vbo_vel_cuda;
 
 	SphParticleSys(int numParticles, glm::vec3 min, glm::vec3 max, sph_sim_settings bss) : ParticleSys(numParticles), h_min(min), h_max(max),
-		m_grid({ glm::ivec3(20,20,20),glm::vec3(5.0,5.0,5.0),numParticles})
+		m_grid({ glm::ivec3(20),glm::vec3(5.0),numParticles})
 	{
 		h_pos = new glm::vec3[numParticles];
 		h_vel = new glm::vec3[numParticles];
@@ -234,8 +234,7 @@ struct SphParticleSys : public ParticleSys {
 
 		Timer grid_timer;
 
-		glm::vec3 offset(50.0, 50.0, 50.0);
-		m_grid.update(d_pos, offset);
+		m_grid.update(d_pos);
 		cudaDeviceSynchronize();
 		
 		d_func.vel = d_vel;

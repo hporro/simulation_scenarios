@@ -5,22 +5,22 @@
 #include <glm/glm.hpp>
 
 #include "particleSys.h"
-#include "BoidsParticleSys.h"
-//#include "sphParticleSys.h"
+//#include "BoidsParticleSys.h"
+#include "sphParticleSys.h"
 #include "particleSysRenderer.h"
 
-#define NUM_PARTICLES 1000000
+#define NUM_PARTICLES 100000
 #define TWOPI 6.2831853072
 
 struct MyApp : public Application {
-	//SphParticleSys psys;
-	BoidsParticleSys psys;
+	SphParticleSys psys;
+	//BoidsParticleSys psys;
 	ParticleSystemRenderer psr;
 	bool run_simulation = true;
 
 	MyApp(int width, int height, std::string title) : Application(width, height, std::move(title)), 
-		psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), {}), 
-		//psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), { 0.01, 0.01, 0.01, 0.01 }),
+		//psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), {}), 
+		psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), { 5.0, 0.01, 0.01, 0.5 }),
 		psr(&psys) {}
 	void run() {
 		Timer dtTimer;
@@ -46,29 +46,29 @@ struct MyApp : public Application {
 			ImGui::Checkbox("Show simulation box", &psr.show_cube);
 			ImGui::Text("Simulation");
 			ImGui::Checkbox("Running simulation", &run_simulation);
-			bool boids_changed = false;
-			boids_changed |= ImGui::DragFloat("Radius of separation", &psys.h_bss->RADA, 0.1, 0.0, 50.0);
-			boids_changed |= ImGui::DragFloat("Radius of cohesion",   &psys.h_bss->RADB, 0.1, 0.0, 50.0);
-			boids_changed |= ImGui::DragFloat("Radius of alignement", &psys.h_bss->RADC, 0.1, 0.0, 50.0);
-			boids_changed |= ImGui::DragFloat("Strength of separation", &psys.h_bss->A_FORCE, 0.1, 0.1, 10.0);
-			boids_changed |= ImGui::DragFloat("Strength of cohesion",   &psys.h_bss->B_FORCE, 0.1, 0.1, 10.0);
-			boids_changed |= ImGui::DragFloat("Strength of alignement", &psys.h_bss->C_FORCE, 0.1, 0.1, 10.0);
-			boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 1.0, 1.0, 40.0);
-			//bool sph_changed = false;
-			//sph_changed |= ImGui::DragFloat("Radius of simulation", &psys.h_bss->rad, 0.1, 0.0, 20.0);
-			//sph_changed |= ImGui::DragFloat("Viscosity", &psys.h_bss->viscosity, 0.1, 0.1, 100.0);
-			//sph_changed |= ImGui::DragFloat("Rho 0",   &psys.h_bss->rho0, 0.1, 0.1, 100.0);
-			//sph_changed |= ImGui::DragFloat("Pressure coeficient (k)", &psys.h_bss->k, 0.1, 0.1, 100.0);
+			//bool boids_changed = false;
+			//boids_changed |= ImGui::DragFloat("Radius of separation", &psys.h_bss->RADA, 0.1, 0.0, 50.0);
+			//boids_changed |= ImGui::DragFloat("Radius of cohesion",   &psys.h_bss->RADB, 0.1, 0.0, 50.0);
+			//boids_changed |= ImGui::DragFloat("Radius of alignement", &psys.h_bss->RADC, 0.1, 0.0, 50.0);
+			//boids_changed |= ImGui::DragFloat("Strength of separation", &psys.h_bss->A_FORCE, 0.1, 0.1, 10.0);
+			//boids_changed |= ImGui::DragFloat("Strength of cohesion",   &psys.h_bss->B_FORCE, 0.1, 0.1, 10.0);
+			//boids_changed |= ImGui::DragFloat("Strength of alignement", &psys.h_bss->C_FORCE, 0.1, 0.1, 10.0);
+			//boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 1.0, 1.0, 40.0);
+			bool sph_changed = false;
+			sph_changed |= ImGui::DragFloat("Radius of simulation", &psys.h_bss->rad, 0.1, 0.0, 20.0);
+			sph_changed |= ImGui::DragFloat("Viscosity", &psys.h_bss->viscosity, 0.1, 0.1, 100.0);
+			sph_changed |= ImGui::DragFloat("Rho 0",   &psys.h_bss->rho0, 0.1, 0.1, 100.0);
+			sph_changed |= ImGui::DragFloat("Pressure coeficient (k)", &psys.h_bss->k, 0.1, 0.1, 100.0);
 			ImGui::End();
 
 			ImGui::Render();
 
-			if (boids_changed) {
-				cudaMemcpy(psys.d_bss, psys.h_bss, sizeof(boids_sim_settings), cudaMemcpyHostToDevice);
-			}
-			//if (sph_changed) {
-			//	cudaMemcpy(psys.d_bss, psys.h_bss, sizeof(sph_sim_settings), cudaMemcpyHostToDevice);
+			//if (boids_changed) {
+			//	cudaMemcpy(psys.d_bss, psys.h_bss, sizeof(boids_sim_settings), cudaMemcpyHostToDevice);
 			//}
+			if (sph_changed) {
+				cudaMemcpy(psys.d_bss, psys.h_bss, sizeof(sph_sim_settings), cudaMemcpyHostToDevice);
+			}
 
 			LOG_TIMING("ImGui tab setting: {} ms", timer.swap_time());
 
