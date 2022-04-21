@@ -20,7 +20,7 @@ struct grid_t {
 struct Grid {
 	Grid(grid_t grid_settings);
 	~Grid();
-	void update(glm::vec3* pos, glm::vec3 offset);
+	void update(glm::vec3* pos);
 	template<typename Functor>
 	void apply_f_frnn(Functor f, glm::vec3* pos, const float rad);
 
@@ -40,16 +40,16 @@ inline __device__ glm::ivec3 ggetGridCellPos(const glm::vec3 pos, grid_t* dgrid)
 
 //  Compute cells coordinate for a particle as int
 inline __device__ int ggetGridCellHash(glm::ivec3 cell, grid_t* dgrid) {
-	//cell.x = cell.x & (dgrid->cellPerAxis.x - 1);
-	//cell.y = cell.y & (dgrid->cellPerAxis.y - 1);
-	//cell.z = cell.z & (dgrid->cellPerAxis.z - 1);
-	return cell.x + cell.y * dgrid->cellPerAxis.x + cell.z * dgrid->cellPerAxis.x * dgrid->cellPerAxis.y;
+	cell.x = cell.x & (dgrid->cellPerAxis.x - 1);
+	cell.y = cell.y & (dgrid->cellPerAxis.y - 1);
+	cell.z = cell.z & (dgrid->cellPerAxis.z - 1);
+	return cell.x + (cell.y + cell.z * dgrid->cellPerAxis.y) * dgrid->cellPerAxis.x;
 }
 
-__global__ void gcalcHash(int* out_hash, int* out_index, const glm::vec3* __restrict__ pos, grid_t* dgrid, glm::vec3 offset) {
+__global__ void gcalcHash(int* out_hash, int* out_index, const glm::vec3* __restrict__ pos, grid_t* dgrid) {
 	const int idx = threadIdx.x + (blockDim.x * blockIdx.x);
 	if (idx < dgrid->dnbr) {
-		glm::vec3 p = pos[idx] + offset;
+		glm::vec3 p = pos[idx];
 		glm::ivec3 index_cell = ggetGridCellPos(p, dgrid);
 		int cell_hash = ggetGridCellHash(index_cell, dgrid);
 
@@ -58,23 +58,16 @@ __global__ void gcalcHash(int* out_hash, int* out_index, const glm::vec3* __rest
 	}
 }
 
-__global__ void gfindCellBounds(int* start, int* stop, const int* __restrict__ hash, const int* __restrict__ index, const glm::vec3* __restrict__ pos, glm::vec3* pos_sorted, grid_t* dgrid, glm::vec3 offset) {
-	int idx = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
+__global__ void gfindCellBounds(int* start, int* stop, const int* __restrict__ hash, const int* __restrict__ index, const glm::vec3* __restrict__ pos, glm::vec3* pos_sorted, grid_t* dgrid) {
+	const int idx = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
 	if (idx < dgrid->dnbr)
 	{
 		atomicMin(&start[hash[idx]], idx);
 		atomicMax(&stop[hash[idx]], idx);
 
-		pos_sorted[idx] = pos[index[idx]] + offset;
+		pos_sorted[idx] = pos[index[idx]];
 	}
 
-}
-
-__global__ void print_int_vector(int n, int* vec, char* msg) {
-	const int idx = threadIdx.x + (blockDim.x * blockIdx.x);
-	if (idx < n) {
-		printf("i: %d, vec: %d\n", idx, vec[idx]);
-	}
 }
 
 Grid::Grid(grid_t grid_settings) {
@@ -113,10 +106,10 @@ void swap(T** r, T** s) {
 }
 
 
-void Grid::update(glm::vec3* pos, glm::vec3 offset) {
+void Grid::update(glm::vec3* pos) {
 	const int nbCell = h_gridp->cellPerAxis.x * h_gridp->cellPerAxis.y* h_gridp->cellPerAxis.z;
 	// find particle position in grid
-	gcalcHash <<<h_gridp->dnbr /1024+1,1024>>> (hash, partId, pos, d_gridp, offset);
+	gcalcHash <<<h_gridp->dnbr /1024+1,1024>>> (hash, partId, pos, d_gridp);
 	cudaDeviceSynchronize();
 	// sort for reorder by part_id
 	dev_partId = thrust::device_pointer_cast(partId);
@@ -132,18 +125,12 @@ void Grid::update(glm::vec3* pos, glm::vec3 offset) {
 	cudaDeviceSynchronize();
 	thrust::fill(thrust::device, dev_start, dev_start + nbCell, 100000000);
 	cudaDeviceSynchronize();
-	//print_int_vector << <1, nbCell >> > (nbCell, start, "start");
-	//print_int_vector << <1, nbCell >> > (nbCell, stop, "stop");
 	
 	gpuErrchk(cudaGetLastError());
 
-	gfindCellBounds <<<h_gridp->dnbr / 1024 + 1, 1024>>> (start, stop, hash, partId, pos, pos_sorted, d_gridp, offset);
+	gfindCellBounds <<<h_gridp->dnbr / 1024 + 1, 1024>>> (start, stop, hash, partId, pos, pos_sorted, d_gridp);
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
-	//print_int_vector << <h_gridp->dnbr / 1024 + 1, 1024 >>> (h_gridp->dnbr, hash,"hash");
-	//print_int_vector << <1, nbCell >> > (nbCell, start, "start");
-	//print_int_vector << <1, nbCell >> > (nbCell, stop, "stop");
-
 
 	/*
 	// reorder position
@@ -151,51 +138,39 @@ void Grid::update(glm::vec3* pos, glm::vec3 offset) {
 	cudaDeviceSynchronize();
 	thrust::device_ptr<glm::vec3> dev_pos_sorted = thrust::device_pointer_cast(this->pos_sorted);
 	cudaDeviceSynchronize();
-	thrust::copy(dev_pos_sorted,dev_pos_sorted+this->nbr,dev_pos);
+	thrust::copy(dev_pos_sorted,dev_pos_sorted+h_gridp->dnbr,dev_pos);
 	cudaDeviceSynchronize();
-	// find wich particle in cells
 	*/
+	// find wich particle in cells
 	//swap(&pos, &this->pos_sorted);
 }
 
 template<class Functor>
 __global__ void apply_f_frnn_kernel(Functor f, const glm::vec3* __restrict__ pos, const int* __restrict__ start, const int* __restrict__ stop, const float rad, grid_t *dgrid, int* __restrict__ ind) {
-	const int idx = blockDim.x * blockIdx.x + threadIdx.x;
-
-	if (idx < dgrid->dnbr) {
-		int count = 0;
+	const int i = blockIdx.x * blockDim.x + threadIdx.x;
+	if (i < dgrid->dnbr) {
+		const glm::ivec3 pl = ggetGridCellPos(pos[i], dgrid);
 		const int nbCell = dgrid->cellPerAxis.x * dgrid->cellPerAxis.y * dgrid->cellPerAxis.z;
-		const glm::ivec3 pl = ggetGridCellPos(pos[idx], dgrid);
 
-		for (int a = -1; a <= 1; a++) {
-			for (int b = -1; b <= 1; b++) {
+		for (int a = -1; a <= 1; a++)
+			for (int b = -1; b <= 1; b++)
 				for (int c = -1; c <= 1; c++) {
-					glm::ivec3 neighboring_cell = pl + glm::ivec3(a, b, c);
-					int current = ggetGridCellHash(neighboring_cell, dgrid);
-					//printf("i: %d Current: %d actual: %d\n", idx, current, ggetGridCellHash(pl, dgrid));
-					if (current < 0) continue;
-					if (current >= nbCell) continue;
-					//printf("i: %d current: %d\n", idx, current);
-					//printf("i: %d start: %d\n", idx, start[current]);
-					//printf("i: %d end: %d\n", idx, stop[current]);
-					for (int i = start[current]; i <= stop[current]; i++) {
-						if (i == idx) continue;
-						glm::dvec3 tmp = pos[idx] - pos[i];
-						const float sqrDist = glm::dot(tmp, tmp);
-						if (sqrDist < rad * rad) {
-							f(ind[idx], ind[i], tmp, sqrDist);
-						}
+					int current = ggetGridCellHash(pl + glm::ivec3(a, b, c), dgrid);
+					for (int j = start[current]; j <= stop[current]; j++) {
+						if (i == j)continue;
+						glm::vec3 dist_vec = pos[i] - pos[j];
+						float dist = glm::length(dist_vec);
+						if(dist<rad) f(ind[i], ind[j], dist_vec, dist);
 					}
 				}
-			}
-		}
+
 	}
 }
 
 template<class Functor>
 void Grid::apply_f_frnn(Functor f, glm::vec3* pos, float rad) {
 	LOG_EVENT("applying frnn");
-	apply_f_frnn_kernel<Functor> <<<h_gridp->dnbr / 124 + 1, 124 >>> (f, pos_sorted, start, stop, rad, d_gridp, partId);
+	apply_f_frnn_kernel<Functor> <<<(h_gridp->dnbr / 1024) + 1, 1024 >>> (f, pos_sorted, start, stop, rad, d_gridp, partId);
 	gpuErrchk(cudaGetLastError());
 	LOG_EVENT("Frnn applied");
 }

@@ -5,17 +5,19 @@
 #include "grid.h"
 #include <algorithm>
 
+#define EPSILON 0.000001
+
 struct boids_sim_settings {
-	float RADA = 25.0; // separation
-	float RADB = 50.0; // cohesion
-	float RADC = 50.0; // alignement
+	float RADA = 0.625; // separation
+	float RADB = 0.95; // cohesion
+	float RADC = 1.25; // alignement
 
 	float A_FORCE = 1.5;
 	float B_FORCE = 1.0;
 	float C_FORCE = 1.0;
 
-	float MAX_VEL = 20.0;
-	float MAX_FORCE = 3.0;
+	float MAX_VEL = 0.02;
+	float MAX_FORCE = 0.003;
 };
 
 struct boids_neighbor_functor {
@@ -28,13 +30,25 @@ struct boids_neighbor_functor {
 		cudaMemset(num_C, 0, numVertices * sizeof(int));
 		cudaMemset(vel, 0, numVertices * sizeof(glm::vec3));
 	}
-	__device__ void operator()(const int& i, const int& j, glm::vec3 dist_vec, double dist) {
-		//printf("Calc: %d %d %lf\n", i, j,dist);
+	__device__ void operator()(const int& i, const int& j, const glm::vec3& dist_vec, const float& dist) {
+		if ((dist > EPSILON) && (dist < d_bss->RADA)) {
+			separation[i] += glm::normalize(dist_vec) / dist;
+			num_A[i] += 1;
+		}
+		if ((dist > EPSILON) && (dist < d_bss->RADB)) {
+			cohesion[i] += pos[j];
+			num_B[i] += 1;
+		}
+		if ((dist > EPSILON) && (dist < d_bss->RADC)) {
+			alignement[i] += vel[j];
+			num_C[i] += 1;
+		}
 	}
 	int numVertices;
 	// this class dont own this stuff
 	glm::vec3 *separation, *cohesion, *alignement; 
-	glm::vec3 *vel;
+	glm::vec3 *pos, *vel;
+	glm::vec3 offset;
 	int *num_A, *num_B, *num_C;
 	boids_sim_settings *d_bss;
 };
@@ -43,23 +57,23 @@ __global__ void move_boids_w_walls(int numParticles, glm::vec3* pos, glm::vec3* 
 	glm::vec3 *separation, glm::vec3 *cohesion, glm::vec3 *alignement, int *num_A, int *num_B, int *num_C, boids_sim_settings* bss) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i < numParticles) {
-		for(int j=0;j<numParticles;j++){
-			if(i==j)continue;
-			glm::vec3 dist_vec = pos[i] - pos[j];
-			float dist = glm::length(dist_vec);
-			if ((dist > 0) && (dist < bss->RADA)) {
-				separation[i] += glm::normalize(dist_vec)/dist;
-				num_A[i] += 1;
-			}
-			if ((dist > 0) && (dist < bss->RADB)) {
-				cohesion[i] += pos[j];
-				num_B[i] += 1;
-			}
-			if ((dist > 0) && (dist < bss->RADC)) {
-				alignement[i] += vel[j];
-				num_C[i] += 1;
-			}
-		}
+		//for(int j=0;j<numParticles;j++){
+		//	if(i==j)continue;
+		//	glm::vec3 dist_vec = pos[i] - pos[j];
+		//	float dist = glm::length(dist_vec);
+		//	if ((dist > 0) && (dist < bss->RADA)) {
+		//		separation[i] += glm::normalize(dist_vec)/dist;
+		//		num_A[i] += 1;
+		//	}
+		//	if ((dist > 0) && (dist < bss->RADB)) {
+		//		cohesion[i] += pos[j];
+		//		num_B[i] += 1;
+		//	}
+		//	if ((dist > 0) && (dist < bss->RADC)) {
+		//		alignement[i] += vel[j];
+		//		num_C[i] += 1;
+		//	}
+		//}
 
 		// separation
 		if (num_A[i] > 0)separation[i] /= (float)num_A[i];
@@ -114,7 +128,7 @@ struct BoidsParticleSys : public ParticleSys {
 	struct cudaGraphicsResource* vbo_pos_cuda, * vbo_vel_cuda;
 
 	BoidsParticleSys(int numParticles, glm::vec3 min, glm::vec3 max, boids_sim_settings bss) : ParticleSys(numParticles), h_min(min), h_max(max), 
-		m_grid({glm::ivec3(2,2,2),glm::vec3(50.0,50.0,50.0),numParticles})
+		m_grid({glm::ivec3(80),glm::vec3(1.25),numParticles})
 	{
 		h_pos = new glm::vec3[numParticles];
 		h_vel = new glm::vec3[numParticles];
@@ -128,7 +142,7 @@ struct BoidsParticleSys : public ParticleSys {
 
 		for (int i = 0; i < numParticles; i++) {
 			h_pos[i] = glm::vec3(distx(rng), disty(rng), distz(rng));
-			h_vel[i] = glm::vec3(0.0);
+			h_vel[i] = glm::vec3(dist01(rng), dist01(rng), dist01(rng));
 		}
 
 		cudaMalloc((void**)&d_separation, numParticles * sizeof(glm::vec3));
@@ -207,20 +221,25 @@ struct BoidsParticleSys : public ParticleSys {
 
 		cff.resetForces();
 
-		int blocksize = 128;
-		int numBlocks = numParticles / blocksize;
+		int blocksize = 1024;
+		int numBlocks = numParticles / blocksize + 1;
 
 		Timer grid_timer;
 
-		glm::vec3 offset(50.0, 50.0, 50.0);
-		//m_grid.update(d_pos, offset);
-		cudaDeviceSynchronize();
-		cff.vel = d_vel;
-		//m_grid.apply_f_frnn<boids_neighbor_functor>(cff, d_pos, glm::max(glm::max(h_bss->RADA, h_bss->RADB), h_bss->RADC));
+
+		m_grid.update(d_pos);
 		cudaDeviceSynchronize();
 		LOG_TIMING("Grid update: {}", grid_timer.swap_time());
+		cff.pos = d_pos;
+		cff.vel = d_vel;
 
-		move_boids_w_walls <<<numBlocks + 1, blocksize >>> (numParticles, d_pos, d_vel, d_min, d_max, dt, d_separation, d_cohesion, d_alignement, d_num_A, d_num_B, d_num_C, d_bss);
+		m_grid.apply_f_frnn<boids_neighbor_functor>(cff, d_pos, 25.0);
+		//move_boids_w_walls_2 << <numBlocks, blocksize >> > (numParticles, d_pos, d_vel, d_min, d_max, dt, d_separation, d_cohesion, d_alignement, d_num_A, d_num_B, d_num_C, d_bss);
+
+		cudaDeviceSynchronize();
+		LOG_TIMING("Grid query: {}", grid_timer.swap_time());
+
+		move_boids_w_walls <<<numBlocks, blocksize >>> (numParticles, d_pos, d_vel, d_min, d_max, dt, d_separation, d_cohesion, d_alignement, d_num_A, d_num_B, d_num_C, d_bss);
 		cudaDeviceSynchronize();
 		LOG_TIMING("Integration: {}", grid_timer.swap_time());
 

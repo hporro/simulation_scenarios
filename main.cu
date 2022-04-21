@@ -6,10 +6,10 @@
 
 #include "particleSys.h"
 #include "BoidsParticleSys.h"
-#include "sphParticleSys.h"
+//#include "sphParticleSys.h"
 #include "particleSysRenderer.h"
 
-#define NUM_PARTICLES 10000
+#define NUM_PARTICLES 1000000
 #define TWOPI 6.2831853072
 
 struct MyApp : public Application {
