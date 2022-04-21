@@ -8,6 +8,7 @@
 #include <thrust/random.h>
 #include <thrust/transform.h>
 #include <thrust/iterator/counting_iterator.h>
+#include <thrust/scan.h>
 
 #include <algorithm>
 
@@ -23,6 +24,7 @@ struct Grid {
 	void update(glm::vec3* pos);
 	template<typename Functor>
 	void apply_f_frnn(Functor f, glm::vec3* pos, const float rad);
+	float mean_num_particle_in_cell();
 
 	int* start, * stop, * hash, * partId;
 	glm::vec3* pos_sorted;
@@ -108,6 +110,9 @@ void swap(T** r, T** s) {
 
 void Grid::update(glm::vec3* pos) {
 	const int nbCell = h_gridp->cellPerAxis.x * h_gridp->cellPerAxis.y* h_gridp->cellPerAxis.z;
+
+	Timer tim;
+
 	// find particle position in grid
 	gcalcHash <<<h_gridp->dnbr /1024+1,1024>>> (hash, partId, pos, d_gridp);
 	cudaDeviceSynchronize();
@@ -128,8 +133,10 @@ void Grid::update(glm::vec3* pos) {
 	
 	gpuErrchk(cudaGetLastError());
 
+	tim.swap_time();
 	gfindCellBounds <<<h_gridp->dnbr / 1024 + 1, 1024>>> (start, stop, hash, partId, pos, pos_sorted, d_gridp);
 	cudaDeviceSynchronize();
+	LOG_TIMING("findCellBounds: {}", tim.swap_time());
 	gpuErrchk(cudaGetLastError());
 
 	/*
@@ -173,4 +180,36 @@ void Grid::apply_f_frnn(Functor f, glm::vec3* pos, float rad) {
 	apply_f_frnn_kernel<Functor> <<<(h_gridp->dnbr / 1024) + 1, 1024 >>> (f, pos_sorted, start, stop, rad, d_gridp, partId);
 	gpuErrchk(cudaGetLastError());
 	LOG_EVENT("Frnn applied");
+}
+
+
+__global__ void num_cells_kernel(int nbCell, const int* __restrict__ start, const int* __restrict__ stop, int* num_cells) {
+	const int i = blockIdx.x * blockDim.x + threadIdx.x;
+	if (i < nbCell) {
+		if(stop[i]>start[i])
+		num_cells[i] = stop[i] - start[i];
+	}
+}
+
+
+float Grid::mean_num_particle_in_cell() {
+	const int nbCell = h_gridp->cellPerAxis.x * h_gridp->cellPerAxis.y * h_gridp->cellPerAxis.z;
+	int *d_mean;
+	cudaMalloc((void**)&d_mean, nbCell*sizeof(int));
+	cudaMemset(d_mean, 0, nbCell*sizeof(int));
+
+	num_cells_kernel <<<nbCell / 32 + 1, 32 >>> (nbCell, start, stop, d_mean);
+	thrust::device_ptr<int> dev_mean = thrust::device_pointer_cast(d_mean);
+	thrust::inclusive_scan(dev_mean, dev_mean + nbCell, dev_mean);
+	cudaDeviceSynchronize();
+
+	int* h_sum = new int[nbCell];
+	cudaMemcpy(h_sum, d_mean, nbCell*sizeof(int), cudaMemcpyDeviceToHost);
+	cudaDeviceSynchronize();
+
+	cudaFree(d_mean);
+
+	float ret = (float)h_sum[nbCell - 1] / (float)nbCell;
+	delete[] h_sum;
+	return ret;
 }
