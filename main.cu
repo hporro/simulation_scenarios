@@ -9,7 +9,7 @@
 #include "sphParticleSys.h"
 #include "particleSysRenderer.h"
 
-#define NUM_PARTICLES 100000
+#define NUM_PARTICLES 10000
 #define TWOPI 6.2831853072
 
 struct MyApp : public Application {
@@ -20,7 +20,7 @@ struct MyApp : public Application {
 
 	MyApp(int width, int height, std::string title) : Application(width, height, std::move(title)), 
 		//psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), {}), 
-		psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), { 5.0, 0.01, 0.01, 0.5 }),
+		psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), { }),
 		psr(&psys) {}
 	void run() {
 		Timer dtTimer;
@@ -55,10 +55,10 @@ struct MyApp : public Application {
 			//boids_changed |= ImGui::DragFloat("Strength of alignement", &psys.h_bss->C_FORCE, 0.1, 0.1, 10.0);
 			//boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 1.0, 1.0, 40.0);
 			bool sph_changed = false;
-			sph_changed |= ImGui::DragFloat("Radius of simulation", &psys.h_bss->rad, 0.1, 0.0, 20.0);
-			sph_changed |= ImGui::DragFloat("Viscosity", &psys.h_bss->viscosity, 0.1, 0.1, 100.0);
-			sph_changed |= ImGui::DragFloat("Rho 0",   &psys.h_bss->rho0, 0.1, 0.1, 100.0);
-			sph_changed |= ImGui::DragFloat("Pressure coeficient (k)", &psys.h_bss->k, 0.1, 0.1, 100.0);
+			sph_changed |= ImGui::DragFloat("Radius of simulation", &psys.h_bss->KernelRadius, 0.1, 0.0, 20.0);
+			sph_changed |= ImGui::DragFloat("Viscosity", &psys.h_bss->Viscosity, 0.1, 0.1, 100.0);
+			sph_changed |= ImGui::DragFloat("Rho 0",   &psys.h_bss->RestDensity, 0.1, 0.1, 100.0);
+			sph_changed |= ImGui::DragFloat("Gas constant (k)", &psys.h_bss->GasConst, 0.1, 0.1, 100.0);
 			ImGui::End();
 
 			ImGui::Render();

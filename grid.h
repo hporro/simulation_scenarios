@@ -21,13 +21,13 @@ struct grid_t {
 struct Grid {
 	Grid(grid_t grid_settings);
 	~Grid();
-	void update(glm::vec3* pos);
+	void update(glm::vec3* pos, glm::vec3 *vel);
 	template<typename Functor>
 	void apply_f_frnn(Functor f, glm::vec3* pos, const float rad);
 	float mean_num_particle_in_cell();
 
 	int* start, * stop, * hash, * partId;
-	glm::vec3* pos_sorted;
+	glm::vec3* pos_sorted, *vel_sorted;
 	thrust::device_ptr<int> dev_start;
 	thrust::device_ptr<int> dev_stop;
 	thrust::device_ptr<int> dev_hash;
@@ -60,7 +60,7 @@ __global__ void gcalcHash(int* out_hash, int* out_index, const glm::vec3* __rest
 	}
 }
 
-__global__ void gfindCellBounds(int* start, int* stop, const int* __restrict__ hash, const int* __restrict__ index, const glm::vec3* __restrict__ pos, glm::vec3* pos_sorted, grid_t* dgrid) {
+__global__ void gfindCellBounds(int* start, int* stop, const int* __restrict__ hash, const int* __restrict__ index, const glm::vec3* __restrict__ pos, const glm::vec3* __restrict__ vel, glm::vec3* pos_sorted, glm::vec3* vel_sorted, grid_t* dgrid) {
 	const int idx = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
 	if (idx < dgrid->dnbr)
 	{
@@ -68,6 +68,7 @@ __global__ void gfindCellBounds(int* start, int* stop, const int* __restrict__ h
 		atomicMax(&stop[hash[idx]], idx);
 
 		pos_sorted[idx] = pos[index[idx]];
+		vel_sorted[idx] = vel[index[idx]];
 	}
 
 }
@@ -81,6 +82,7 @@ Grid::Grid(grid_t grid_settings) {
 	cudaMalloc(&this->hash, sizeof(int) * h_gridp->dnbr);
 	cudaMalloc(&this->partId, sizeof(int) * h_gridp->dnbr);
 	cudaMalloc(&this->pos_sorted, sizeof(glm::vec3) * h_gridp->dnbr);
+	cudaMalloc(&this->vel_sorted, sizeof(glm::vec3) * h_gridp->dnbr);
 	cudaMalloc(&this->d_gridp, sizeof(grid_t));
 	cudaMemcpy(d_gridp, h_gridp, sizeof(grid_t),cudaMemcpyHostToDevice);
 	//*d_gridp = *h_gridp;
@@ -96,6 +98,7 @@ Grid::~Grid() {
 	cudaFree(&this->hash);
 	cudaFree(&this->partId);
 	cudaFree(&this->pos_sorted);
+	cudaFree(&this->vel_sorted);
 	cudaFree(&this->d_gridp);
 	delete h_gridp;
 }
@@ -108,7 +111,7 @@ void swap(T** r, T** s) {
 }
 
 
-void Grid::update(glm::vec3* pos) {
+void Grid::update(glm::vec3* pos, glm::vec3* vel) {
 	const int nbCell = h_gridp->cellPerAxis.x * h_gridp->cellPerAxis.y* h_gridp->cellPerAxis.z;
 
 	Timer tim;
@@ -134,10 +137,13 @@ void Grid::update(glm::vec3* pos) {
 	gpuErrchk(cudaGetLastError());
 
 	tim.swap_time();
-	gfindCellBounds <<<h_gridp->dnbr / 1024 + 1, 1024>>> (start, stop, hash, partId, pos, pos_sorted, d_gridp);
+	gfindCellBounds <<<h_gridp->dnbr / 1024 + 1, 1024>>> (start, stop, hash, partId, pos, vel, pos_sorted, vel_sorted, d_gridp);
 	cudaDeviceSynchronize();
 	LOG_TIMING("findCellBounds: {}", tim.swap_time());
 	gpuErrchk(cudaGetLastError());
+
+	cudaMemcpy(pos, pos_sorted, h_gridp->dnbr * sizeof(glm::vec3), cudaMemcpyDeviceToDevice);
+	cudaMemcpy(vel, vel_sorted, h_gridp->dnbr * sizeof(glm::vec3), cudaMemcpyDeviceToDevice);
 
 	/*
 	// reorder position
@@ -164,7 +170,6 @@ __global__ void apply_f_frnn_kernel(Functor f, const glm::vec3* __restrict__ pos
 				for (int c = -1; c <= 1; c++) {
 					int current = ggetGridCellHash(pl + glm::ivec3(a, b, c), dgrid);
 					for (int j = start[current]; j <= stop[current]; j++) {
-						if (i == j)continue;
 						glm::vec3 dist_vec = pos[i] - pos[j];
 						float dist = glm::length(dist_vec);
 						if(dist<rad) f(ind[i], ind[j], dist_vec, dist);
