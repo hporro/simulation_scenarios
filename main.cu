@@ -16,7 +16,7 @@ struct MyApp : public Application {
 	SphParticleSys psys;
 	//BoidsParticleSys psys;
 	ParticleSystemRenderer psr;
-	bool run_simulation = true;
+	bool run_simulation = false;
 
 	MyApp(int width, int height, std::string title) : Application(width, height, std::move(title)), 
 		//psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), {}), 
@@ -55,10 +55,21 @@ struct MyApp : public Application {
 			//boids_changed |= ImGui::DragFloat("Strength of alignement", &psys.h_bss->C_FORCE, 0.1, 0.1, 10.0);
 			//boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 1.0, 1.0, 40.0);
 			bool sph_changed = false;
-			sph_changed |= ImGui::DragFloat("Radius of simulation", &psys.h_bss->KernelRadius, 0.1, 0.0, 20.0);
+			sph_changed |= ImGui::DragFloat("Ext force strength", &psys.h_bss->ExtForce.y, 0.1, -600.0, 600.0);
+			sph_changed |= ImGui::DragFloat("Radius of simulation", &psys.h_bss->KernelRadius, 0.1, 0.1, 20.0);
 			sph_changed |= ImGui::DragFloat("Viscosity", &psys.h_bss->Viscosity, 0.1, 0.1, 100.0);
 			sph_changed |= ImGui::DragFloat("Rho 0",   &psys.h_bss->RestDensity, 0.1, 0.1, 100.0);
 			sph_changed |= ImGui::DragFloat("Gas constant (k)", &psys.h_bss->GasConst, 0.1, 0.1, 100.0);
+			sph_changed |= ImGui::DragFloat("Particle mass", &psys.h_bss->PartMass, 0.1, 0.1, 100.0);
+			sph_changed |= ImGui::DragFloat("Col restitution", &psys.h_bss->ColRestitution, 0.1, 0.1, 100.0);
+
+			//glm::vec3 ExtForce = glm::vec3(0.f, 12 * 9.8, 0.0);
+			//float RestDensity = 10.;
+			//float GasConst = 20.;
+			//float KernelRadius = 0.08;
+			//float PartMass = 0.6;
+			//float Viscosity = 2.5;
+			//float ColRestitution = 0.20f;
 			ImGui::End();
 
 			ImGui::Render();
@@ -73,8 +84,8 @@ struct MyApp : public Application {
 			LOG_TIMING("ImGui tab setting: {} ms", timer.swap_time());
 
 			float dt = dtTimer.swap_time(); // dt is in ms
-			if(run_simulation)
-				psys.update(dt/1000.0);
+			for(int c=0;c<5 && run_simulation;c++)
+				psys.update(dt/10000.0);
 
 			LOG_TIMING("Particle update time: {} ms", timer.swap_time());
 
