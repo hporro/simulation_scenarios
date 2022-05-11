@@ -65,61 +65,12 @@ __global__ void gfindCellBounds(int* start, int* stop, const int* __restrict__ h
 	const int idx = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
 	if (idx < dgrid->dnbr)
 	{
-		extern __shared__ int sharedHash[];    // blockSize + 1 elements
-		int index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
+		atomicMin(&start[hash_arr[idx]], idx);
+		atomicMax(&stop[hash_arr[idx]], idx);
 
-		int hash;
-
-		// handle case when no. of particles not multiple of block size
-		if (index < dgrid->dnbr)
-		{
-			hash = hash_arr[index];
-
-			// Load hash data into shared memory so that we can look
-			// at neighboring particle's hash value without loading
-			// two hash values per thread
-			sharedHash[threadIdx.x + 1] = hash;
-
-			if (index > 0 && threadIdx.x == 0)
-			{
-				// first thread in block must load neighbor particle hash
-				sharedHash[0] = hash_arr[index - 1];
-			}
-		}
-
-		__syncthreads();
-
-		if (index < dgrid->dnbr)
-		{
-			// If this particle has a different cell index to the previous
-			// particle then it must be the first particle in the cell,
-			// so store the index of this particle in the cell.
-			// As it isn't the first particle, it must also be the cell end of
-			// the previous particle's cell
-
-			if (index == 0 || hash != sharedHash[threadIdx.x])
-			{
-				start[hash] = index;
-
-				if (index > 0)
-					stop[sharedHash[threadIdx.x]] = index;
-			}
-
-			if (index == dgrid->dnbr - 1)
-			{
-				stop[hash] = index + 1;
-			}
-
-			// Now use the sorted index to reorder the pos and vel data
-			int sortedIndex = ind[index];
-			glm::vec3 pos_i = pos[sortedIndex];
-			glm::vec3 vel_i = vel[sortedIndex];
-
-			pos_sorted[index] = pos_i;
-			vel_sorted[index] = vel_i;
-		}
+		pos_sorted[idx] = pos[ind[idx]];
+		vel_sorted[idx] = vel[ind[idx]];
 	}
-
 }
 
 Grid::Grid(grid_t grid_settings) {
@@ -186,7 +137,7 @@ void Grid::update(glm::vec3* pos, glm::vec3* vel) {
 	gpuErrchk(cudaGetLastError());
 
 	tim.swap_time();
-	gfindCellBounds <<<h_gridp->dnbr / 1024 + 1, 1024, 1025>>> (start, stop, hash, partId, pos, vel, pos_sorted, vel_sorted, d_gridp);
+	gfindCellBounds <<<h_gridp->dnbr / 1024 + 1, 1024>>> (start, stop, hash, partId, pos, vel, pos_sorted, vel_sorted, d_gridp);
 	cudaDeviceSynchronize();
 	LOG_TIMING("findCellBounds: {}", tim.swap_time());
 	gpuErrchk(cudaGetLastError());

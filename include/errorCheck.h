@@ -27,8 +27,8 @@ void glCheckError(const char* file, unsigned int line) {
     }
 }
 
-#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
-//#define gpuErrchk(ans) (ans)
+//#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+#define gpuErrchk(ans) (ans)
 
 inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort = true)
 {

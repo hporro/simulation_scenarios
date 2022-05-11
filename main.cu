@@ -9,14 +9,15 @@
 #include "sphParticleSys.h"
 #include "particleSysRenderer.h"
 
-#define NUM_PARTICLES 10000
+constexpr int NUM_PARTICLES = 10000;
 #define TWOPI 6.2831853072
 
 struct MyApp : public Application {
 	SphParticleSys psys;
 	//BoidsParticleSys psys;
 	ParticleSystemRenderer psr;
-	bool run_simulation = false;
+	int sim_frames_per_frame = 1;
+	bool run_simulation = true;
 
 	MyApp(int width, int height, std::string title) : Application(width, height, std::move(title)), 
 		//psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), {}), 
@@ -38,6 +39,7 @@ struct MyApp : public Application {
 			ImGui::Begin("Info/Settings", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 			ImGui::Text("Visualization");
 			ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+			ImGui::DragInt("Simulation frames per frame", &sim_frames_per_frame, 1, 1, 20);
 			ImGui::DragFloat("Zoom", &psr.zoom, 0.01, 0.5, 3.0);
 			ImGui::DragFloat("Particle radius", &psr.radius, 0.1, 0.3, 50.0);
 			ImGui::DragFloat("X rotation", &psr.xrot, 0.01, -TWOPI, TWOPI);
@@ -55,12 +57,12 @@ struct MyApp : public Application {
 			//boids_changed |= ImGui::DragFloat("Strength of alignement", &psys.h_bss->C_FORCE, 0.1, 0.1, 10.0);
 			//boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 1.0, 1.0, 40.0);
 			bool sph_changed = false;
-			sph_changed |= ImGui::DragFloat("Ext force strength", &psys.h_bss->ExtForce.y, 0.1, -600.0, 600.0);
-			sph_changed |= ImGui::DragFloat("Radius of simulation", &psys.h_bss->KernelRadius, 0.1, 0.1, 20.0);
-			sph_changed |= ImGui::DragFloat("Viscosity", &psys.h_bss->Viscosity, 0.1, 0.1, 100.0);
-			sph_changed |= ImGui::DragFloat("Rho 0",   &psys.h_bss->RestDensity, 0.1, 0.1, 100.0);
-			sph_changed |= ImGui::DragFloat("Gas constant (k)", &psys.h_bss->GasConst, 0.1, 0.1, 100.0);
-			sph_changed |= ImGui::DragFloat("Particle mass", &psys.h_bss->PartMass, 0.1, 0.1, 100.0);
+			sph_changed |= ImGui::DragFloat("Ext force strength", &psys.h_bss->gravity, 0.1, -600.0, 600.0);
+			sph_changed |= ImGui::DragFloat("Radius of simulation", &psys.h_bss->h, 0.1, 0.1, 20.0);
+			sph_changed |= ImGui::DragFloat("Viscosity", &psys.h_bss->viscosity, 0.1, 0.1, 100.0);
+			sph_changed |= ImGui::DragFloat("Rho 0",   &psys.h_bss->density, 0.1, 0.1, 100.0);
+			sph_changed |= ImGui::DragFloat("Gas constant (k)", &psys.h_bss->k, 0.1, 0.1, 100.0);
+			sph_changed |= ImGui::DragFloat("Particle mass", &psys.h_bss->mass, 0.1, 0.1, 100.0);
 			sph_changed |= ImGui::DragFloat("Col restitution", &psys.h_bss->ColRestitution, 0.1, 0.1, 100.0);
 
 			//glm::vec3 ExtForce = glm::vec3(0.f, 12 * 9.8, 0.0);
@@ -84,8 +86,10 @@ struct MyApp : public Application {
 			LOG_TIMING("ImGui tab setting: {} ms", timer.swap_time());
 
 			float dt = dtTimer.swap_time(); // dt is in ms
-			for(int c=0;c<5 && run_simulation;c++)
-				psys.update(dt/10000.0);
+			for (int c = 0; c < sim_frames_per_frame && run_simulation; c++) {
+				psys.update(dt / 10000.0);
+				//printf("timestep\n");
+			}
 
 			LOG_TIMING("Particle update time: {} ms", timer.swap_time());
 
