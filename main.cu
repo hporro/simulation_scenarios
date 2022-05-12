@@ -9,7 +9,7 @@
 #include "sphParticleSys.h"
 #include "particleSysRenderer.h"
 
-constexpr int NUM_PARTICLES = 10000;
+constexpr int NUM_PARTICLES = 100000;
 #define TWOPI 6.2831853072
 
 struct MyApp : public Application {
