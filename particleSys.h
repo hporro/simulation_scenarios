@@ -1,7 +1,7 @@
 #pragma once
 
 #include "cuda_gl_interop.h"
-#include "glm/vec3.hpp"
+#include "glm/vec4.hpp"
 #include "glm/glm.hpp"
 #include <random>
 #include "errorCheck.h"
@@ -13,7 +13,7 @@ struct ParticleSys {
 	virtual void update(float dt)=0;
 };
 
-__global__ void move_shaker_w_walls(int numParticles, glm::vec3* pos, glm::vec3* vel, glm::vec3* min, glm::vec3* max, float dt) {
+__global__ void move_shaker_w_walls(int numParticles, glm::vec4* pos, glm::vec4* vel, glm::vec4* min, glm::vec4* max, float dt) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i < numParticles) {
 		if (pos[i].x + vel[i].x > max[0].x)vel[i].x *= -1.0;
@@ -28,16 +28,16 @@ __global__ void move_shaker_w_walls(int numParticles, glm::vec3* pos, glm::vec3*
 
 // Example of a ParticleSys
 struct ShakerParticleSys : public ParticleSys {
-	glm::vec3 *d_vel, *h_vel;
-	glm::vec3 *d_pos, *h_pos;
-	glm::vec3 h_min, h_max;
-	glm::vec3 *d_min, *d_max;
+	glm::vec4 *d_vel, *h_vel;
+	glm::vec4 *d_pos, *h_pos;
+	glm::vec4 h_min, h_max;
+	glm::vec4 *d_min, *d_max;
 
 	struct cudaGraphicsResource *vbo_pos_cuda, *vbo_vel_cuda;
 
-	ShakerParticleSys(int numParticles, glm::vec3 min, glm::vec3 max) : ParticleSys(numParticles), h_min(min), h_max(max) {
-		h_pos = new glm::vec3[numParticles];
-		h_vel = new glm::vec3[numParticles];
+	ShakerParticleSys(int numParticles, glm::vec4 min, glm::vec4 max) : ParticleSys(numParticles), h_min(min), h_max(max) {
+		h_pos = new glm::vec4[numParticles];
+		h_vel = new glm::vec4[numParticles];
 
 		std::random_device dev;
 		std::mt19937 rng(dev());
@@ -47,23 +47,23 @@ struct ShakerParticleSys : public ParticleSys {
 		std::uniform_real_distribution<> dist01(-3.0, 3.0); // 3 m/s
 
 		for (int i = 0; i < numParticles; i++) {
-			h_pos[i] = glm::vec3(distx(rng), disty(rng), distz(rng));
-			h_vel[i] = glm::vec3(dist01(rng), dist01(rng), dist01(rng));
+			h_pos[i] = glm::vec4(distx(rng), disty(rng), distz(rng), 0.0);
+			h_vel[i] = glm::vec4(dist01(rng), dist01(rng), dist01(rng), 0.0);
 		}
 
-		cudaMalloc((void**)&d_min, sizeof(glm::vec3));
-		cudaMalloc((void**)&d_max, sizeof(glm::vec3));
-		cudaMemcpy(d_min, &h_min, sizeof(glm::vec3), cudaMemcpyHostToDevice);
-		cudaMemcpy(d_max, &h_max, sizeof(glm::vec3), cudaMemcpyHostToDevice);
+		cudaMalloc((void**)&d_min, sizeof(glm::vec4));
+		cudaMalloc((void**)&d_max, sizeof(glm::vec4));
+		cudaMemcpy(d_min, &h_min, sizeof(glm::vec4), cudaMemcpyHostToDevice);
+		cudaMemcpy(d_max, &h_max, sizeof(glm::vec4), cudaMemcpyHostToDevice);
 
 		glGenBuffers(1, &vbo_pos);
 		glGenBuffers(1, &vbo_vel);
 		GLCHECKERR();
 
 		glBindBuffer(GL_ARRAY_BUFFER, vbo_pos);
-		glBufferData(GL_ARRAY_BUFFER, numParticles * sizeof(glm::vec3), &h_pos[0], GL_DYNAMIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, numParticles * sizeof(glm::vec4), &h_pos[0], GL_DYNAMIC_DRAW);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo_vel);
-		glBufferData(GL_ARRAY_BUFFER, numParticles * sizeof(glm::vec3), &h_vel[0], GL_DYNAMIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, numParticles * sizeof(glm::vec4), &h_vel[0], GL_DYNAMIC_DRAW);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		GLCHECKERR();
 

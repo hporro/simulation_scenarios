@@ -20,8 +20,8 @@ struct MyApp : public Application {
 	bool run_simulation = true;
 
 	MyApp(int width, int height, std::string title) : Application(width, height, std::move(title)), 
-		//psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), {}), 
-		psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), { }),
+		//psys(NUM_PARTICLES, glm::vec4(-50.0, -50.0, -50.0), glm::vec4(50.0, 50.0, 50.0), {}), 
+		psys(NUM_PARTICLES, glm::vec4(-50.0, -50.0, -50.0, 0.0), glm::vec4(50.0, 50.0, 50.0, 0.0), { }),
 		psr(&psys) {}
 	void run() {
 		Timer dtTimer;
@@ -65,7 +65,7 @@ struct MyApp : public Application {
 			sph_changed |= ImGui::DragFloat("Particle mass", &psys.h_bss->mass, 0.1, 0.1, 100.0);
 			sph_changed |= ImGui::DragFloat("Col restitution", &psys.h_bss->ColRestitution, 0.1, 0.1, 100.0);
 
-			//glm::vec3 ExtForce = glm::vec3(0.f, 12 * 9.8, 0.0);
+			//glm::vec4 ExtForce = glm::vec4(0.f, 12 * 9.8, 0.0);
 			//float RestDensity = 10.;
 			//float GasConst = 20.;
 			//float KernelRadius = 0.08;

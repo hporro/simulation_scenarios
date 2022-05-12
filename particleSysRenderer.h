@@ -44,7 +44,7 @@ struct ParticleSystemRenderer {
 		glBindBuffer(GL_ARRAY_BUFFER, psys->vbo_pos);
 		GLCHECKERR();
 
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+		glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
 		glVertexAttribDivisor(0, 1);
 		glEnableVertexAttribArray(0);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);

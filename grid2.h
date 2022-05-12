@@ -9,18 +9,18 @@
 #include <algorithm>
 
 struct GridCount_data {
-	glm::vec3 min;
-	glm::vec3 cell_size;
-	glm::ivec3 num_cells;
+	glm::vec4 min;
+	glm::vec4 cell_size;
+	glm::ivec4 num_cells;
 	int tot_num_cells;
 };
 
 struct GridCount {
-	GridCount(int numP, glm::vec3 min, glm::vec3 cell_size, glm::ivec3 num_cells);
+	GridCount(int numP, glm::vec4 min, glm::vec4 cell_size, glm::ivec4 num_cells);
 	~GridCount();
-	void update(glm::vec3* pos, glm::vec3* vel);
+	void update(glm::vec4* pos, glm::vec4* vel);
 	template<class Functor>
-	void apply_f_frnn(Functor f, glm::vec3* pos, const float rad);
+	void apply_f_frnn(Functor f, glm::vec4* pos, const float rad);
 	float mean_num_particle_in_cell();
 	//float mean_num_particle_in_cell();
 	
@@ -28,7 +28,7 @@ struct GridCount {
 	int numP;
 	int blocksize = 64;
 	GridCount_data *d_gcdata, *h_gcdata;
-	glm::vec3 *pos_sorted, *vel_sorted;
+	glm::vec4 *pos_sorted, *vel_sorted;
 	int *d_hash;
 	int *d_count_keys, *d_cumulative_count_keys;
 	int *d_ind;
@@ -37,10 +37,10 @@ struct GridCount {
 	int *d_num_particles;
 
 	// private function
-	void sort_hashed(glm::vec3* pos, glm::vec3* vel);
+	void sort_hashed(glm::vec4* pos, glm::vec4* vel);
 };
 
-GridCount::GridCount(int numP, glm::vec3 min, glm::vec3 cell_size, glm::ivec3 num_cells) : numP(numP) {
+GridCount::GridCount(int numP, glm::vec4 min, glm::vec4 cell_size, glm::ivec4 num_cells) : numP(numP) {
 	h_gcdata = new GridCount_data[1];
 	h_gcdata[0].min = min;
 	h_gcdata[0].cell_size = cell_size;
@@ -49,8 +49,8 @@ GridCount::GridCount(int numP, glm::vec3 min, glm::vec3 cell_size, glm::ivec3 nu
 	cudaMalloc(&this->d_gcdata, sizeof(GridCount_data));
 	cudaMemcpy(d_gcdata, &h_gcdata[0], sizeof(GridCount_data), cudaMemcpyHostToDevice);
 
-	cudaMalloc(&this->pos_sorted,              sizeof(glm::vec3)*numP);
-	cudaMalloc(&this->vel_sorted,              sizeof(glm::vec3)*numP);
+	cudaMalloc(&this->pos_sorted,              sizeof(glm::vec4)*numP);
+	cudaMalloc(&this->vel_sorted,              sizeof(glm::vec4)*numP);
 	cudaMalloc(&this->d_hash,                  sizeof(int)*numP);
 	cudaMalloc(&this->d_count_keys,            sizeof(int)*h_gcdata->tot_num_cells+1);
 	cudaMalloc(&this->d_cumulative_count_keys, sizeof(int)*h_gcdata->tot_num_cells+1);
@@ -77,21 +77,21 @@ GridCount::~GridCount() {
 	gpuErrchk(cudaGetLastError());
 }
 
-__device__ int calcHash(glm::vec3 p, GridCount_data* __restrict__ gcdata) {
-	p -= gcdata->min;
-	p.x *= gcdata->num_cells.x / (float)(gcdata->cell_size.x);
-	p.y *= gcdata->num_cells.y / (float)(gcdata->cell_size.y);
-	p.z *= gcdata->num_cells.z / (float)(gcdata->cell_size.z);
-	glm::ivec3 q(floor(p.x), floor(p.y), floor(p.z));
+__device__ int calcHash(glm::vec4 p, GridCount_data* __restrict__ gcdata) {
+	glm::vec4 pe = p - gcdata->min;
+	pe.x *= gcdata->num_cells.x / (float)(gcdata->cell_size.x);
+	pe.y *= gcdata->num_cells.y / (float)(gcdata->cell_size.y);
+	pe.z *= gcdata->num_cells.z / (float)(gcdata->cell_size.z);
+	glm::ivec4 q(floor(pe.x), floor(pe.y), floor(pe.z), 0);
 	return (q.z * gcdata->cell_size.y + q.y)* gcdata->cell_size.x + q.x;
 }
 
-__global__ void calc_hash_kernel(int numP, glm::vec3* __restrict__ pos, int* hash, GridCount_data* __restrict__ gcdata) {
+__global__ void calc_hash_kernel(int numP, glm::vec4* __restrict__ pos, int* hash, GridCount_data* __restrict__ gcdata) {
 	const int i = threadIdx.x + (blockDim.x * blockIdx.x);
 	if (i < numP) hash[i] = calcHash(pos[i], gcdata); 
 }
 
-void GridCount::update(glm::vec3* pos, glm::vec3* vel) {
+void GridCount::update(glm::vec4* pos, glm::vec4* vel) {
 	calc_hash_kernel<<<numP/blocksize + 1, blocksize>>>(numP, pos, d_hash, d_gcdata);
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
@@ -114,7 +114,7 @@ __global__ void compute_new_indices_kernel(int numP, int* ind, int* __restrict__
 	}
 }
 
-__global__ void reorder_arrays_kernel(int numP, glm::vec3* __restrict__ pos, glm::vec3* __restrict__ vel, glm::vec3* sorted_pos, glm::vec3* sorted_vel, int* __restrict__ ind) {
+__global__ void reorder_arrays_kernel(int numP, glm::vec4* __restrict__ pos, glm::vec4* __restrict__ vel, glm::vec4* sorted_pos, glm::vec4* sorted_vel, int* __restrict__ ind) {
 	const int i = threadIdx.x + (blockDim.x * blockIdx.x);
 	if (i < numP) {
 		sorted_pos[ind[i]] = pos[i];
@@ -122,7 +122,7 @@ __global__ void reorder_arrays_kernel(int numP, glm::vec3* __restrict__ pos, glm
 	}
 }
 
-void GridCount::sort_hashed(glm::vec3* pos, glm::vec3* vel) {
+void GridCount::sort_hashed(glm::vec4* pos, glm::vec4* vel) {
 	Timer grid_timer;
 
 	cudaMemset(d_count_keys, 0, h_gcdata->tot_num_cells * sizeof(int));
@@ -153,21 +153,21 @@ void GridCount::sort_hashed(glm::vec3* pos, glm::vec3* vel) {
 	gpuErrchk(cudaGetLastError());
 	LOG_TIMING("reorder_arrays_kernel: {}", grid_timer.swap_time());
 
-	cudaMemcpy(pos, pos_sorted, numP * sizeof(glm::vec3), cudaMemcpyDeviceToDevice);
-	cudaMemcpy(vel, vel_sorted, numP * sizeof(glm::vec3), cudaMemcpyDeviceToDevice);
+	cudaMemcpy(pos, pos_sorted, numP * sizeof(glm::vec4), cudaMemcpyDeviceToDevice);
+	cudaMemcpy(vel, vel_sorted, numP * sizeof(glm::vec4), cudaMemcpyDeviceToDevice);
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
 	LOG_TIMING("reorder arrays: {}", grid_timer.swap_time());
 }
 
 template<class Functor>
-__global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restrict__ pos, int* __restrict__ count_keys, int* __restrict__ cumulative_count_keys, float rad2, GridCount_data* gcdata) {
+__global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec4* __restrict__ pos, int* __restrict__ count_keys, int* __restrict__ cumulative_count_keys, float rad2, GridCount_data* gcdata) {
 	const int i = threadIdx.x + (blockDim.x * blockIdx.x);
 	int const num_x = gcdata->num_cells.x;
 	int const num_y = gcdata->num_cells.y;
 	int const num_z = gcdata->num_cells.z;
 	if (i < numP) {
-		const glm::vec3 pos_i = pos[i];
+		const glm::vec4 pos_i = pos[i];
 		int hi = calcHash(pos_i, gcdata);
 		for (int ddx = -1; ddx <= 1; ddx++) {
 			for (int ddy = -1; ddy <= 1; ddy++) {
@@ -175,7 +175,7 @@ __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restric
 					int h = hi + ddx + (ddz * num_y + ddy) * num_x;
 					h += (h > gcdata->tot_num_cells ? -gcdata->tot_num_cells : 0) + (h < 0 ? gcdata->tot_num_cells : 0); // border case
 					for (int j = cumulative_count_keys[h]; j < cumulative_count_keys[h] + count_keys[h]; j++) {
-						const glm::vec3 sub_vector = pos[j] - pos_i;
+						const glm::vec4 sub_vector = pos[j] - pos_i;
 						float r2 = glm::dot(sub_vector, sub_vector);
 						if (r2 < rad2) {
 							f(i, j, sub_vector, sqrt(rad2));
@@ -188,7 +188,7 @@ __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restric
 }
 
 template<class Functor>
-void GridCount::apply_f_frnn(Functor f, glm::vec3* pos, const float rad) {
+void GridCount::apply_f_frnn(Functor f, glm::vec4* pos, const float rad) {
 	apply_f_frnn_gc_kernel<Functor><<<numP/blocksize+ 1, blocksize >>>(f, numP, pos, d_count_keys, d_cumulative_count_keys, rad*rad, d_gcdata);
 	gpuErrchk(cudaGetLastError());
 }
