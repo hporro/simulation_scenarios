@@ -13,7 +13,7 @@ struct sph_sim_settings {
 	float density = 1000;
 	float gravity = -9.8;
 	glm::vec3 box_size = glm::vec3(100.0);
-	float spacing = (float)(0.5*100.0/pow(100000,1.0/3.0));
+	float spacing = (float)(0.5*100.0/pow(1000000,1.0/3.0));
 	float dt = 0.001;
 	float h = (float)(2.0 * spacing);
 	float mass = (float)(pow(spacing, 3) * density);
@@ -62,8 +62,11 @@ struct sph_density_functor {
 		cudaMemset(f_external, 0.0, numParticles * sizeof(glm::vec3));
 		cudaMemset(pressure, 0.0, numParticles * sizeof(float));
 	}
-	__device__ void operator()(const int& i, const int& j, glm::vec3 dist_vec, double dist) {
+	__device__ void operator()(const int& i, const int& j, const glm::vec3 dist_vec, const double dist) {
+		if (dist >= d_bss->h)return;
 		rho[i] += kernelM4(dist, d_bss);
+		//rho[i] += 315. / (65. * H_PI * pow(d_bss->h, 9.f)) * pow(d_bss->h * d_bss->h - dist*dist, 3.);
+		//if(i==0)printf("RHO i: %d j: %d rho[i]: %f\n", i, j, rho[i]);
 	}
 	int numParticles;
 
@@ -75,14 +78,15 @@ struct sph_density_functor {
 	sph_sim_settings* d_bss;
 };
 struct sph_forces_functor {
-	__device__ void operator()(const int& i, const int& j, glm::vec3 dist_vec, double dist) {
-		if (i == j || dist < 0.0000001)return;
-		if (rho[i] == 0.0) { 
-			//printf("wtf rho0\n"); 
-			return; 
-		}
+	__device__ void operator()(const int& i, const int& j, const glm::vec3 dist_vec, const double dist) {
+		if (i == j)return;
+		if (dist > d_bss->h)return;
+		//if (i == 0)printf("FORCES i: %d j: %d\n", i, j);
+		if (rho[i] <= 0.0) return;
 		f_viscosity[i]+= (vel[i] - vel[j]) * (d_bss->k / rho[i] * kernelVisc_dd(dist, d_bss));
+		//f_viscosity[i] += (vel[i] - vel[j]) * (d_bss->k / rho[i] * 45. / (H_PI * pow(d_bss->h, 6.f)) * (d_bss->h - dist));
 		f_pressure[i] -= (dist_vec)/dist * (0.5f * (pressure[i] + pressure[j]) / rho[i] * kernelM4_d(dist, d_bss));
+		//f_pressure[i] -= (dist_vec) / dist * (0.5f * (pressure[i] + pressure[j]) / rho[i] * -45. / (H_PI * pow(d_bss->h, 6.f)) * pow(d_bss->h - dist, 2.));
 	}
 	int numParticles;
 
@@ -93,58 +97,6 @@ struct sph_forces_functor {
 	float *pressure;
 	sph_sim_settings* d_bss;
 };
-
-__device__ float sdCircle(glm::vec3 p, float r)
-{
-	return glm::length(p) - r;
-}
-
-__device__ glm::vec3 normal_circle(glm::vec3 p, float r) // for function f(p)
-{
-	float eps = 0.001; // or some other value
-	glm::vec3 dx(eps, 0, 0);
-	glm::vec3 dy(0, eps, 0);
-	glm::vec3 dz(0, 0, eps);
-	return glm::normalize(glm::vec3(sdCircle(p + dx, r) - sdCircle(p - dx, r),
-									sdCircle(p + dy, r) - sdCircle(p - dy, r),
-									sdCircle(p + dz, r) - sdCircle(p - dz, r)));
-}
-
-
-template<class T>
-__device__ T h_max(T a, T b) {
-	return a > b ? a : b;
-}
-
-template<class T>
-__device__ T h_min(T a, T b) {
-	return a < b ? a : b;
-}
-
-__device__ glm::vec3 v_max(glm::vec3 a, glm::vec3 b) {
-	return glm::vec3(h_max(a.x, b.x), h_max(a.y, b.y), h_max(a.z, b.z));
-}
-
-__device__ float v_max(glm::vec3 a) {
-	return h_max(h_max(a.x, a.y), a.z);
-}
-
-__device__ float sdBox(glm::vec3 q, glm::vec3 b)
-{
-	glm::vec3 d = glm::abs(q) - b;
-	return glm::length(v_max(d, glm::vec3(0.0))) + h_min(v_max(d), 0.0f);
-}
-
-__device__ glm::vec3 normal_bx(glm::vec3 p, glm::vec3 b) // for function f(p)
-{
-	float eps = 0.001; // or some other value
-	glm::vec3 dx(eps, 0, 0);
-	glm::vec3 dy(0, eps, 0);
-	glm::vec3 dz(0, 0, eps);
-	return glm::normalize(glm::vec3(sdBox(p + dx, b) - sdBox(p - dx, b),
-									sdBox(p + dy, b) - sdBox(p - dy, b),
-									sdBox(p + dz, b) - sdBox(p - dz, b)));
-}
 
 __global__ void move_sph_w_walls(int numParticles, glm::vec3* pos, glm::vec3* vel, glm::vec3* min, glm::vec3* max, sph_sim_settings* bss, glm::vec3* f_viscosity, glm::vec3 *f_external, glm::vec3 *f_pressure, float* rho) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -176,18 +128,6 @@ __global__ void move_sph_w_walls(int numParticles, glm::vec3* pos, glm::vec3* ve
 			vel[i] -= n * d * bss->ColRestitution;
 			//pos[i] += vel[i] * bss->dt;
 		}
-
-		//glm::vec3 v_guess = vel[i] + dt * (f_viscosity[i] + f_external[i]);
-		//vel[i] = v_guess + dt * (f_pressure[i] + glm::vec3(0.0f,0.01f,0.0f));
-		//
-		//if (pos[i].x + dt * vel[i].x > max[0].x)vel[i].x=0;
-		//if (pos[i].y + dt * vel[i].y > max[0].y)vel[i].y=0;
-		//if (pos[i].z + dt * vel[i].z > max[0].z)vel[i].z=0;
-		//if (pos[i].x + dt * vel[i].x < min[0].x)vel[i].x=0;
-		//if (pos[i].y + dt * vel[i].y < min[0].y)vel[i].y=0;
-		//if (pos[i].z + dt * vel[i].z < min[0].z)vel[i].z=0;
-
-		//pos[i] += dt * vel[i];
 	}
 }
 
@@ -353,12 +293,12 @@ struct SphParticleSys : public ParticleSys {
 		gpuErrchk(cudaGetLastError());
 
 
-		m_grid->apply_f_frnn<sph_density_functor>  (d_func, d_pos, h_bss->h);
+		m_grid->apply_f_frnn<sph_density_functor>(d_func, d_pos, h_bss->h);
 		cudaDeviceSynchronize();
 		gpuErrchk(cudaGetLastError());
 		calc_pressure<<<numBlocks + 1, blocksize >>>(numParticles, d_pressure, d_rho, d_bss);
 		cudaDeviceSynchronize();
-		m_grid->apply_f_frnn<sph_forces_functor> (p_func, d_pos, h_bss->h);
+		m_grid->apply_f_frnn<sph_forces_functor>(p_func, d_pos, h_bss->h);
 		cudaDeviceSynchronize();
 		gpuErrchk(cudaGetLastError());
 

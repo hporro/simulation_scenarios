@@ -20,7 +20,7 @@ struct GridCount {
 	~GridCount();
 	void update(glm::vec3* pos, glm::vec3* vel);
 	template<class Functor>
-	void apply_f_frnn(Functor f, glm::vec3* pos, const float rad);
+	void apply_f_frnn(Functor &f, glm::vec3* pos, const float rad);
 	float mean_num_particle_in_cell();
 	//float mean_num_particle_in_cell();
 	
@@ -79,16 +79,21 @@ GridCount::~GridCount() {
 
 __device__ int calcHash(glm::vec3 p, GridCount_data* __restrict__ gcdata) {
 	p -= gcdata->min;
-	p.x *= gcdata->num_cells.x / (float)(gcdata->cell_size.x);
-	p.y *= gcdata->num_cells.y / (float)(gcdata->cell_size.y);
-	p.z *= gcdata->num_cells.z / (float)(gcdata->cell_size.z);
+	//printf("p: %f %f %f\n", p.x, p.y, p.z);
+	p.x /= ((float)gcdata->cell_size.x);
+	p.y /= ((float)gcdata->cell_size.y);
+	p.z /= ((float)gcdata->cell_size.z);
+	//printf("p: %f %f %f\n", p.x, p.y, p.z);
 	glm::ivec3 q(floor(p.x), floor(p.y), floor(p.z));
-	return (q.z * gcdata->cell_size.y + q.y)* gcdata->cell_size.x + q.x;
+	return (q.z * gcdata->cell_size.y + q.y) * gcdata->cell_size.x + q.x;
 }
 
 __global__ void calc_hash_kernel(int numP, glm::vec3* __restrict__ pos, int* hash, GridCount_data* __restrict__ gcdata) {
 	const int i = threadIdx.x + (blockDim.x * blockIdx.x);
-	if (i < numP) hash[i] = calcHash(pos[i], gcdata); 
+	if (i < numP) {
+		hash[i] = calcHash(pos[i], gcdata);
+		//printf("i: %d hash[i]: %d\n", i, hash[i]);
+	}
 }
 
 void GridCount::update(glm::vec3* pos, glm::vec3* vel) {
@@ -169,6 +174,7 @@ __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restric
 	if (i < numP) {
 		const glm::vec3 pos_i = pos[i];
 		int hi = calcHash(pos_i, gcdata);
+
 		for (int ddx = -1; ddx <= 1; ddx++) {
 			for (int ddy = -1; ddy <= 1; ddy++) {
 				for (int ddz = -1; ddz <= 1; ddz++) {
@@ -176,10 +182,12 @@ __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restric
 					h += (h > gcdata->tot_num_cells ? -gcdata->tot_num_cells : 0) + (h < 0 ? gcdata->tot_num_cells : 0); // border case
 					for (int j = cumulative_count_keys[h]; j < cumulative_count_keys[h] + count_keys[h]; j++) {
 						const glm::vec3 sub_vector = pos[j] - pos_i;
+
+						//float r = sqrt(sub_vector.x * sub_vector.x + sub_vector.y * sub_vector.y + sub_vector.z * sub_vector.z);
 						float r2 = glm::dot(sub_vector, sub_vector);
-						if (r2 < rad2) {
-							f(i, j, sub_vector, sqrt(rad2));
-						}
+						//if (i == 0)printf("FRNN hi: %d h: %d i: %d j: %d r2: %f r: %f pos[i]: %f %f %f pos[j]: %f %f %f dist_vec: %f %f %f\n", hi, h, i, j, r2, sqrt(r2), pos_i.x, pos_i.y, pos_i.z, pos[j].x, pos[j].y, pos[j].z, sub_vector.x, sub_vector.y, sub_vector.z);
+						if (r2 > rad2) continue;
+						f(i, j, sub_vector, sqrt(r2));
 					}
 				}
 			}
@@ -188,7 +196,7 @@ __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restric
 }
 
 template<class Functor>
-void GridCount::apply_f_frnn(Functor f, glm::vec3* pos, const float rad) {
+void GridCount::apply_f_frnn(Functor &f, glm::vec3* pos, const float rad) {
 	apply_f_frnn_gc_kernel<Functor><<<numP/blocksize+ 1, blocksize >>>(f, numP, pos, d_count_keys, d_cumulative_count_keys, rad*rad, d_gcdata);
 	gpuErrchk(cudaGetLastError());
 }
