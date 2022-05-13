@@ -38,3 +38,5 @@ add_executable(playground playground.cu)
 target_link_libraries(playground
 	PRIVATE glm
 )
+
+add_subdirectory(test)

@@ -174,6 +174,7 @@ __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restric
 	if (i < numP) {
 		const glm::vec3 pos_i = pos[i];
 		int hi = calcHash(pos_i, gcdata);
+		printf("i: %d hi: %d pos[i]: %f %f %f\n", i, hi, pos_i.x, pos_i.y, pos_i.z);
 
 		for (int ddx = -1; ddx <= 1; ddx++) {
 			for (int ddy = -1; ddy <= 1; ddy++) {
@@ -183,9 +184,9 @@ __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restric
 					for (int j = cumulative_count_keys[h]; j < cumulative_count_keys[h] + count_keys[h]; j++) {
 						const glm::vec3 sub_vector = pos[j] - pos_i;
 
-						//float r = sqrt(sub_vector.x * sub_vector.x + sub_vector.y * sub_vector.y + sub_vector.z * sub_vector.z);
+						float r = sqrt(sub_vector.x * sub_vector.x + sub_vector.y * sub_vector.y + sub_vector.z * sub_vector.z);
 						float r2 = glm::dot(sub_vector, sub_vector);
-						//if (i == 0)printf("FRNN hi: %d h: %d i: %d j: %d r2: %f r: %f pos[i]: %f %f %f pos[j]: %f %f %f dist_vec: %f %f %f\n", hi, h, i, j, r2, sqrt(r2), pos_i.x, pos_i.y, pos_i.z, pos[j].x, pos[j].y, pos[j].z, sub_vector.x, sub_vector.y, sub_vector.z);
+						if (i == 0)printf("FRNN hi: %d h: %d i: %d j: %d r2: %f r: %f pos[i]: %f %f %f pos[j]: %f %f %f dist_vec: %f %f %f\n", hi, h, i, j, r2, sqrt(r2), pos_i.x, pos_i.y, pos_i.z, pos[j].x, pos[j].y, pos[j].z, sub_vector.x, sub_vector.y, sub_vector.z);
 						if (r2 > rad2) continue;
 						f(i, j, sub_vector, sqrt(r2));
 					}
