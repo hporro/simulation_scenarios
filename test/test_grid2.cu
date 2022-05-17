@@ -118,7 +118,7 @@ void packed_lattice_test() {
 	int max_neighs = 40;
 	float rad = 1.0;
 	glm::vec3 min(0.0);
-	glm::vec3 cell_size(1.0);
+	glm::vec3 cell_size(4.0);
 	glm::ivec3 num_cells(10);
 	GridCount gc(numP, min, cell_size, num_cells);
 
@@ -191,7 +191,9 @@ void packed_lattice_test() {
 
 int main() {
 	init_logging();
+	printf("TEST1 --------------------------------------\n\n");
 	RUN(lattice_test);
+	printf("\n\nTEST2 --------------------------------------\n\n");
 	RUN(packed_lattice_test);
 	return TEST_REPORT();
 }

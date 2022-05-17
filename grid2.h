@@ -266,7 +266,7 @@ __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restric
 				for (int ddz = -1; ddz <= 1; ddz++) {
 					int h = hi + ddx + (ddz * num_y + ddy) * num_x;
 					h += (h > gcdata->tot_num_cells ? -gcdata->tot_num_cells : 0) + (h < 0 ? gcdata->tot_num_cells : 0); // border case
-					//printf("i: %d h: %d num_cell_neighs: %d\n", i, h, cumulative_count_keys[h] + count_keys[h]);
+					if(i==0)printf("i: %d h: %d num_cell_neighs: %d\n", i, h, cumulative_count_keys[h] + count_keys[h]);
 					for (int j = cumulative_count_keys[h]; j < cumulative_count_keys[h] + count_keys[h]; j++) {
 						const glm::vec3 sub_vector = pos[j] - pos_i;
 
