@@ -4,7 +4,9 @@
 #include "glm/vec3.hpp"
 #include "glm/glm.hpp"
 #include <random>
-#include "errorCheck.h"
+#include "glErrCheck.h"
+#include "gpuErrCheck.h"
+
 
 struct ParticleSys {
 	int numParticles;

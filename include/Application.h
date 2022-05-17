@@ -12,7 +12,8 @@
 #include <vector>
 
 #include "Logging.h"
-#include "errorCheck.h"
+#include "glErrCheck.h"
+#include "gpuErrCheck.h"
 #include "timing_helpers.h"
 
 enum Event_IDs {
