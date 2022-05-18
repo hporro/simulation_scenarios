@@ -116,10 +116,10 @@ __global__ void move_sph_w_walls(int numParticles, glm::vec3* pos, glm::vec3* ve
 
 		// Boundary conditions
 		glm::vec3 b(50.0);
-		float d = sdBox(pos[i], b) + bss->h;
-		glm::vec3 n = normal_bx(pos[i],b);
-		//float d = sdCircle(pos[i], 50) + bss->h;
-		//glm::vec3 n = normal_circle(pos[i], 50);
+		//float d = sdBox(pos[i], b) + bss->h;
+		//glm::vec3 n = normal_bx(pos[i],b);
+		float d = sdCircle(pos[i], 50) + bss->h;
+		glm::vec3 n = normal_circle(pos[i], 50);
 		if (d > 0.)
 		{
 			pos[i] += n * -d;

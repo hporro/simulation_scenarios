@@ -5,23 +5,23 @@
 #include <glm/glm.hpp>
 
 #include "particleSys.h"
-//#include "BoidsParticleSys.h"
-#include "sphParticleSys.h"
+#include "BoidsParticleSys.h"
+//#include "sphParticleSys.h"
 #include "particleSysRenderer.h"
 
-constexpr int NUM_PARTICLES = 10000;
+constexpr int NUM_PARTICLES = 1000000;
 #define TWOPI 6.2831853072
 
 struct MyApp : public Application {
-	SphParticleSys psys;
-	//BoidsParticleSys psys;
+	//SphParticleSys psys;
+	BoidsParticleSys psys;
 	ParticleSystemRenderer psr;
 	int sim_frames_per_frame = 1;
 	bool run_simulation = true;
 
 	MyApp(int width, int height, std::string title) : Application(width, height, std::move(title)), 
-		//psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), {}), 
-		psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), { }),
+		psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), {}), 
+		//psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), { }),
 		psr(&psys) {}
 	void run() {
 		Timer dtTimer;
@@ -48,40 +48,33 @@ struct MyApp : public Application {
 			ImGui::Checkbox("Show simulation box", &psr.show_cube);
 			ImGui::Text("Simulation");
 			ImGui::Checkbox("Running simulation", &run_simulation);
-			//bool boids_changed = false;
-			//boids_changed |= ImGui::DragFloat("Radius of separation", &psys.h_bss->RADA, 0.1, 0.0, 50.0);
-			//boids_changed |= ImGui::DragFloat("Radius of cohesion",   &psys.h_bss->RADB, 0.1, 0.0, 50.0);
-			//boids_changed |= ImGui::DragFloat("Radius of alignement", &psys.h_bss->RADC, 0.1, 0.0, 50.0);
-			//boids_changed |= ImGui::DragFloat("Strength of separation", &psys.h_bss->A_FORCE, 0.1, 0.1, 10.0);
-			//boids_changed |= ImGui::DragFloat("Strength of cohesion",   &psys.h_bss->B_FORCE, 0.1, 0.1, 10.0);
-			//boids_changed |= ImGui::DragFloat("Strength of alignement", &psys.h_bss->C_FORCE, 0.1, 0.1, 10.0);
-			//boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 1.0, 1.0, 40.0);
-			bool sph_changed = false;
-			sph_changed |= ImGui::DragFloat("Ext force strength", &psys.h_bss->gravity, 0.1, -600.0, 600.0);
-			sph_changed |= ImGui::DragFloat("Radius of simulation", &psys.h_bss->h, 0.1, 0.1, 20.0);
-			sph_changed |= ImGui::DragFloat("Viscosity", &psys.h_bss->viscosity, 0.1, 0.1, 100.0);
-			sph_changed |= ImGui::DragFloat("Rho 0",   &psys.h_bss->density, 0.1, 0.1, 100.0);
-			sph_changed |= ImGui::DragFloat("Gas constant (k)", &psys.h_bss->k, 0.1, 0.1, 100.0);
-			sph_changed |= ImGui::DragFloat("Particle mass", &psys.h_bss->mass, 0.1, 0.1, 100.0);
-			sph_changed |= ImGui::DragFloat("Col restitution", &psys.h_bss->ColRestitution, 0.1, 0.1, 100.0);
+			bool boids_changed = false;
+			boids_changed |= ImGui::DragFloat("Radius of separation", &psys.h_bss->RADA, 0.1, 0.0, 50.0);
+			boids_changed |= ImGui::DragFloat("Radius of cohesion",   &psys.h_bss->RADB, 0.1, 0.0, 50.0);
+			boids_changed |= ImGui::DragFloat("Radius of alignement", &psys.h_bss->RADC, 0.1, 0.0, 50.0);
+			boids_changed |= ImGui::DragFloat("Strength of separation", &psys.h_bss->A_FORCE, 0.1, 0.1, 10.0);
+			boids_changed |= ImGui::DragFloat("Strength of cohesion",   &psys.h_bss->B_FORCE, 0.1, 0.1, 10.0);
+			boids_changed |= ImGui::DragFloat("Strength of alignement", &psys.h_bss->C_FORCE, 0.1, 0.1, 10.0);
+			boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 1.0, 1.0, 40.0);
+			//bool sph_changed = false;
+			//sph_changed |= ImGui::DragFloat("Ext force strength", &psys.h_bss->gravity, 0.1, -600.0, 600.0);
+			//sph_changed |= ImGui::DragFloat("Radius of simulation", &psys.h_bss->h, 0.1, 0.1, 20.0);
+			//sph_changed |= ImGui::DragFloat("Viscosity", &psys.h_bss->viscosity, 0.1, 0.1, 100.0);
+			//sph_changed |= ImGui::DragFloat("Rho 0",   &psys.h_bss->density, 0.1, 0.1, 100.0);
+			//sph_changed |= ImGui::DragFloat("Gas constant (k)", &psys.h_bss->k, 0.1, 0.1, 100.0);
+			//sph_changed |= ImGui::DragFloat("Particle mass", &psys.h_bss->mass, 0.1, 0.1, 100.0);
+			//sph_changed |= ImGui::DragFloat("Col restitution", &psys.h_bss->ColRestitution, 0.1, 0.1, 100.0);
 
-			//glm::vec3 ExtForce = glm::vec3(0.f, 12 * 9.8, 0.0);
-			//float RestDensity = 10.;
-			//float GasConst = 20.;
-			//float KernelRadius = 0.08;
-			//float PartMass = 0.6;
-			//float Viscosity = 2.5;
-			//float ColRestitution = 0.20f;
 			ImGui::End();
 
 			ImGui::Render();
 
-			//if (boids_changed) {
-			//	cudaMemcpy(psys.d_bss, psys.h_bss, sizeof(boids_sim_settings), cudaMemcpyHostToDevice);
-			//}
-			if (sph_changed) {
-				cudaMemcpy(psys.d_bss, psys.h_bss, sizeof(sph_sim_settings), cudaMemcpyHostToDevice);
+			if (boids_changed) {
+				cudaMemcpy(psys.d_bss, psys.h_bss, sizeof(boids_sim_settings), cudaMemcpyHostToDevice);
 			}
+			//if (sph_changed) {
+			//	cudaMemcpy(psys.d_bss, psys.h_bss, sizeof(sph_sim_settings), cudaMemcpyHostToDevice);
+			//}
 
 			LOG_TIMING("ImGui tab setting: {} ms", timer.swap_time());
 

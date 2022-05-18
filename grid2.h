@@ -125,7 +125,6 @@ void GridCount::update(glm::vec3* pos) {
 	cudaDeviceSynchronize();
 	//printf("hash: \n");
 	//print_d_vec(numP, d_hash);
-	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
 	sort_hashed(pos);
 	gpuErrchk(cudaGetLastError());

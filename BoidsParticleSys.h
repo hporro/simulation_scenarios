@@ -2,22 +2,22 @@
 
 #include "particleSys.h"
 #include "helper.cuh"
-#include "grid.h"
+#include "grid2.h"
 #include <algorithm>
 
 #define EPSILON 0.000001
 
 struct boids_sim_settings {
-	float RADA = 1.2; // separation
-	float RADB = 1.5; // cohesion
-	float RADC = 2.5; // alignement
+	float RADA = 1.0; // separation
+	float RADB = 2.0; // cohesion
+	float RADC = 5.0; // alignement
 
 	float A_FORCE = 1.5;
 	float B_FORCE = 1.0;
 	float C_FORCE = 1.0;
 
-	float MAX_VEL = 0.02;
-	float MAX_FORCE = 0.003;
+	float MAX_VEL = 0.25;
+	float MAX_FORCE = 0.13;
 };
 
 struct boids_neighbor_functor {
@@ -32,7 +32,7 @@ struct boids_neighbor_functor {
 	}
 	inline __device__ void operator()(const int& i, const int& j, const glm::vec3& dist_vec, const float& dist) {
 		if ((dist > EPSILON) && (dist < d_bss->RADA)) {
-			separation[i] += glm::normalize(dist_vec) / dist;
+			separation[i] -= glm::normalize(dist_vec) / dist;
 			num_A[i] += 1;
 		}
 		if ((dist > EPSILON) && (dist < d_bss->RADB)) {
@@ -75,6 +75,11 @@ __global__ void move_boids_w_walls(int numParticles, glm::vec3* pos, glm::vec3* 
 		//	}
 		//}
 
+		//printf("i: %d separation[i]: %f %f %f\n", i, separation[i].x, separation[i].y, separation[i].z);
+		//printf("i: %d cohesion[i]: %f %f %f\n", i, cohesion[i].x, cohesion[i].y, cohesion[i].z);
+		//printf("i: %d alignement[i]: %f %f %f\n", i, alignement[i].x, alignement[i].y, alignement[i].z);
+
+
 		// separation
 		if (num_A[i] > 0)separation[i] /= (float)num_A[i];
 		if (glm::length(separation[i]) > 0) {
@@ -82,7 +87,7 @@ __global__ void move_boids_w_walls(int numParticles, glm::vec3* pos, glm::vec3* 
 		}
 		
 		// cohesion
-		if (num_B[i] > 0) {
+		if (num_B[i] > 0) if (glm::length(cohesion[i]) > 0.0) {
 			cohesion[i] /= (float)num_B[i];
 			cohesion[i] = glm::normalize(glm::normalize(cohesion[i]-pos[i]) * bss->MAX_VEL - vel[i]) * bss->MAX_FORCE;
 		}
@@ -96,8 +101,11 @@ __global__ void move_boids_w_walls(int numParticles, glm::vec3* pos, glm::vec3* 
 		glm::vec3 acel = separation[i] + cohesion[i] + alignement[i];
 
 		vel[i] += dt * acel;
+		//printf("i: %d vel[i]: %f %f %f\n", i, vel[i].x, vel[i].y, vel[i].z);
 
+		if(glm::length(vel[i])>0)
 		vel[i] = glm::normalize(vel[i]) * bss->MAX_VEL;
+		//printf("i: %d vel[i]: %f %f %f\n", i, vel[i].x, vel[i].y, vel[i].z);
 
 		if (pos[i].x + dt * vel[i].x > max[0].x)vel[i].x *= -1.0;
 		if (pos[i].y + dt * vel[i].y > max[0].y)vel[i].y *= -1.0;
@@ -120,16 +128,16 @@ struct BoidsParticleSys : public ParticleSys {
 	glm::vec3 *d_pos, *h_pos;
 	glm::vec3  h_min,  h_max;
 	glm::vec3 *d_min, *d_max;
-	Grid m_grid;
+	GridCount* m_grid;
 
 	glm::vec3 *d_separation, *d_cohesion, *d_alignement;
 	int *d_num_A, *d_num_B, *d_num_C;
 	
 	struct cudaGraphicsResource* vbo_pos_cuda, * vbo_vel_cuda;
 
-	BoidsParticleSys(int numParticles, glm::vec3 min, glm::vec3 max, boids_sim_settings bss) : ParticleSys(numParticles), h_min(min), h_max(max), 
-		m_grid({glm::ivec3(40),glm::vec3(2.5),numParticles})
+	BoidsParticleSys(int numParticles, glm::vec3 min, glm::vec3 max, boids_sim_settings bss) : ParticleSys(numParticles), h_min(min), h_max(max)
 	{
+		m_grid = new GridCount(numParticles, glm::vec3(-50.0), glm::vec3(5.0), glm::ivec3(20));
 		h_pos = new glm::vec3[numParticles];
 		h_vel = new glm::vec3[numParticles];
 		
@@ -226,24 +234,22 @@ struct BoidsParticleSys : public ParticleSys {
 
 		Timer grid_timer;
 
-
-		m_grid.update(d_pos);
+		m_grid->update(d_pos,d_vel);
 		cudaDeviceSynchronize();
 		LOG_TIMING("Grid update: {} ms", grid_timer.swap_time());
 
 		cff.pos = d_pos;
 		cff.vel = d_vel;
-		m_grid.apply_f_frnn<boids_neighbor_functor>(cff, d_pos, 2.5);
+		m_grid->apply_f_frnn<boids_neighbor_functor>(cff, d_pos, 5.0);
 		cudaDeviceSynchronize();
 		LOG_TIMING("Grid query: {} ms", grid_timer.swap_time());
 
-		move_boids_w_walls <<<numBlocks, blocksize >>> (numParticles, d_pos, d_vel, d_min, d_max, dt, d_separation, d_cohesion, d_alignement, d_num_A, d_num_B, d_num_C, d_bss);
+		move_boids_w_walls <<<numBlocks, blocksize >>> (numParticles, d_pos, d_vel, d_min, d_max, 0.5, d_separation, d_cohesion, d_alignement, d_num_A, d_num_B, d_num_C, d_bss);
 		cudaDeviceSynchronize();
 		LOG_TIMING("Integration: {} ms", grid_timer.swap_time());
 
-		printf("Mean num particles in cell: %f %f\n",m_grid.mean_num_particle_in_cell(), (float)numParticles/(float)(40*40*40));
-		
-		LOG_TIMING("Mean num particles in cell: {} ms", grid_timer.swap_time());
+		LOG_EVENT("Mean num of particles: {}", m_grid->mean_num_particle_in_cell());
+		LOG_TIMING("Calc mean num of particles: {}", grid_timer.swap_time());
 
 		gpuErrchk(cudaGraphicsUnmapResources(1, &vbo_pos_cuda, 0));
 		gpuErrchk(cudaGraphicsUnmapResources(1, &vbo_vel_cuda, 0));
