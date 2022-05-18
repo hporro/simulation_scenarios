@@ -8,13 +8,13 @@
 #define EPSILON 0.000001
 
 struct boids_sim_settings {
-	float RADA = 1.0; // separation
-	float RADB = 2.0; // cohesion
-	float RADC = 5.0; // alignement
+	float RADA = 0.6; // separation
+	float RADB = 0.8; // cohesion
+	float RADC = 1.5; // alignement
 
-	float A_FORCE = 1.5;
-	float B_FORCE = 1.0;
-	float C_FORCE = 1.0;
+	float A_FORCE = 1.0;
+	float B_FORCE = 0.05;
+	float C_FORCE = 0.4;
 
 	float MAX_VEL = 0.25;
 	float MAX_FORCE = 0.13;
@@ -28,15 +28,15 @@ struct boids_neighbor_functor {
 		cudaMemset(num_A, 0, numVertices * sizeof(int));
 		cudaMemset(num_B, 0, numVertices * sizeof(int));
 		cudaMemset(num_C, 0, numVertices * sizeof(int));
-		cudaMemset(vel, 0, numVertices * sizeof(glm::vec3));
+		//cudaMemset(vel, 0, numVertices * sizeof(glm::vec3));
 	}
 	inline __device__ void operator()(const int& i, const int& j, const glm::vec3& dist_vec, const float& dist) {
 		if ((dist > EPSILON) && (dist < d_bss->RADA)) {
-			separation[i] -= glm::normalize(dist_vec) / dist;
+			separation[i] -= dist_vec;
 			num_A[i] += 1;
 		}
 		if ((dist > EPSILON) && (dist < d_bss->RADB)) {
-			cohesion[i] += pos[j];
+			cohesion[i] += dist_vec;
 			num_B[i] += 1;
 		}
 		if ((dist > EPSILON) && (dist < d_bss->RADC)) {
@@ -89,7 +89,7 @@ __global__ void move_boids_w_walls(int numParticles, glm::vec3* pos, glm::vec3* 
 		// cohesion
 		if (num_B[i] > 0) if (glm::length(cohesion[i]) > 0.0) {
 			cohesion[i] /= (float)num_B[i];
-			cohesion[i] = glm::normalize(glm::normalize(cohesion[i]-pos[i]) * bss->MAX_VEL - vel[i]) * bss->MAX_FORCE;
+			cohesion[i] = glm::normalize(glm::normalize(cohesion[i]) * bss->MAX_VEL - vel[i]) * bss->MAX_FORCE;
 		}
 
 		// alignement
@@ -137,7 +137,7 @@ struct BoidsParticleSys : public ParticleSys {
 
 	BoidsParticleSys(int numParticles, glm::vec3 min, glm::vec3 max, boids_sim_settings bss) : ParticleSys(numParticles), h_min(min), h_max(max)
 	{
-		m_grid = new GridCount(numParticles, glm::vec3(-50.0), glm::vec3(5.0), glm::ivec3(20));
+		m_grid = new GridCount(numParticles, glm::vec3(-50.0), glm::vec3(1.5), glm::ivec3(70));
 		h_pos = new glm::vec3[numParticles];
 		h_vel = new glm::vec3[numParticles];
 		
@@ -240,11 +240,11 @@ struct BoidsParticleSys : public ParticleSys {
 
 		cff.pos = d_pos;
 		cff.vel = d_vel;
-		m_grid->apply_f_frnn<boids_neighbor_functor>(cff, d_pos, 5.0);
+		m_grid->apply_f_frnn<boids_neighbor_functor>(cff, d_pos, 1.5);
 		cudaDeviceSynchronize();
 		LOG_TIMING("Grid query: {} ms", grid_timer.swap_time());
 
-		move_boids_w_walls <<<numBlocks, blocksize >>> (numParticles, d_pos, d_vel, d_min, d_max, 0.5, d_separation, d_cohesion, d_alignement, d_num_A, d_num_B, d_num_C, d_bss);
+		move_boids_w_walls <<<numBlocks, blocksize >>> (numParticles, d_pos, d_vel, d_min, d_max, 0.05, d_separation, d_cohesion, d_alignement, d_num_A, d_num_B, d_num_C, d_bss);
 		cudaDeviceSynchronize();
 		LOG_TIMING("Integration: {} ms", grid_timer.swap_time());
 
