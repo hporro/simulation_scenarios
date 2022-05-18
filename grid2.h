@@ -83,12 +83,11 @@ GridCount::~GridCount() {
 __device__ int calcHash(glm::vec3 p, GridCount_data* __restrict__ gcdata) {
 	p -= gcdata->min;
 	//printf("p: %f %f %f\n", p.x, p.y, p.z);
-	p.x /= ((float)gcdata->cell_size.x);
-	p.y /= ((float)gcdata->cell_size.y);
-	p.z /= ((float)gcdata->cell_size.z);
+	int x = p.x / gcdata->cell_size.x;
+	int y = p.y / gcdata->cell_size.y;
+	int z = p.z / gcdata->cell_size.z;
 	//printf("p: %f %f %f\n", p.x, p.y, p.z);
-	glm::ivec3 q(floor(p.x), floor(p.y), floor(p.z));
-	return (q.z * gcdata->cell_size.y + q.y) * gcdata->cell_size.x + q.x;
+	return (z * gcdata->num_cells.y + y) * gcdata->num_cells.x + x;
 }
 
 __global__ void calc_hash_kernel(int numP, glm::vec3* __restrict__ pos, int* hash, GridCount_data* __restrict__ gcdata) {
@@ -266,15 +265,13 @@ __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restric
 				for (int ddz = -1; ddz <= 1; ddz++) {
 					int h = hi + ddx + (ddz * num_y + ddy) * num_x;
 					h += (h > gcdata->tot_num_cells ? -gcdata->tot_num_cells : 0) + (h < 0 ? gcdata->tot_num_cells : 0); // border case
-					if(i==0)printf("i: %d h: %d num_cell_neighs: %d\n", i, h, cumulative_count_keys[h] + count_keys[h]);
+					//if(i==0)printf("i: %d h: %d num_cell_neighs: %d\n", i, h, cumulative_count_keys[h] + count_keys[h]);
 					for (int j = cumulative_count_keys[h]; j < cumulative_count_keys[h] + count_keys[h]; j++) {
 						const glm::vec3 sub_vector = pos[j] - pos_i;
 
-						float r = sqrt(sub_vector.x * sub_vector.x + sub_vector.y * sub_vector.y + sub_vector.z * sub_vector.z);
 						float r2 = glm::dot(sub_vector, sub_vector);
 						//printf("FRNN hi: %d h: %d i: %d j: %d r2: %f r: %f pos[i]: %f %f %f pos[j]: %f %f %f dist_vec: %f %f %f\n", hi, h, i, j, r2, sqrt(r2), pos_i.x, pos_i.y, pos_i.z, pos[j].x, pos[j].y, pos[j].z, sub_vector.x, sub_vector.y, sub_vector.z);
-						if (r2 > rad2) continue;
-						f(i, j, sub_vector, sqrt(r2));
+						if (r2 <= rad2) f(i, j, sub_vector, sqrt(r2));
 					}
 				}
 			}
