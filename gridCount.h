@@ -204,9 +204,7 @@ void GridCount::sort_hashed(glm::vec3* pos, glm::vec3* vel) {
 template<class T>
 __global__ void init_arr(int n, T* arr, T val) {
 	const int i = threadIdx.x + (blockDim.x * blockIdx.x);
-	if (i < n) {
-		arr[i] = val;
-	}
+	if (i < n) arr[i] = val;
 }
 
 void GridCount::sort_hashed(glm::vec3* pos) {
@@ -263,7 +261,7 @@ __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restric
 			for (int ddy = -1; ddy <= 1; ddy++) {
 				for (int ddz = -1; ddz <= 1; ddz++) {
 					int h = hi + ddx + (ddz * num_y + ddy) * num_x;
-					h += (h > gcdata->tot_num_cells ? -gcdata->tot_num_cells : 0) + (h < 0 ? gcdata->tot_num_cells : 0); // border case
+					h += (h > gcdata->tot_num_cells ? -gcdata->tot_num_cells : 0) + (h < 0 ? gcdata->tot_num_cells : 0); // border case. The particles in the border also check for neighbors in the oposite borders
 					//if(i==0)printf("i: %d h: %d num_cell_neighs: %d\n", i, h, cumulative_count_keys[h] + count_keys[h]);
 					for (int j = cumulative_count_keys[h]; j < cumulative_count_keys[h] + count_keys[h]; j++) {
 						const glm::vec3 sub_vector = pos[j] - pos_i;

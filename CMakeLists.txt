@@ -24,15 +24,25 @@ set (IMGUI_SRCs
 
 file(COPY ${CMAKE_SOURCE_DIR}/shaders DESTINATION ${CMAKE_BINARY_DIR})
 
-add_executable(main main.cu ${IMGUI_SRCs})
-target_link_libraries(main
+add_executable(SPH SPH.cu ${IMGUI_SRCs})
+target_link_libraries(SPH
 	PRIVATE glfw
 	PRIVATE libglew_static
 	PRIVATE glm
 )
 
-target_compile_options(main PRIVATE -Wall)
-target_include_directories(main PRIVATE lib/spdlog/include lib/imgui include)
+target_compile_options(SPH PRIVATE -Wall)
+target_include_directories(SPH PRIVATE lib/spdlog/include lib/imgui include)
+
+add_executable(boids boids.cu ${IMGUI_SRCs})
+target_link_libraries(boids
+	PRIVATE glfw
+	PRIVATE libglew_static
+	PRIVATE glm
+)
+
+target_compile_options(boids PRIVATE -Wall)
+target_include_directories(boids PRIVATE lib/spdlog/include lib/imgui include)
 
 add_executable(playground playground.cu)
 target_link_libraries(playground

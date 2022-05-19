@@ -95,6 +95,10 @@ struct Application {
 			glEnable(GL_DEPTH_TEST);  // enable depth-testing
 			glDepthFunc(GL_LESS);  // depth-testing interprets a smaller value as "closer"
 
+			glfwWindowHint(GLFW_SAMPLES, 4);
+			glEnable(GL_MULTISAMPLE);
+			GLCHECKERR();
+
 			// vsync
 			// glfwSwapInterval(false);
 			opengl_context_initialized = true;

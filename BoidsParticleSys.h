@@ -2,7 +2,7 @@
 
 #include "particleSys.h"
 #include "helper.cuh"
-#include "grid2.h"
+#include "grid.h"
 #include <algorithm>
 
 #define EPSILON 0.000001
@@ -128,7 +128,7 @@ struct BoidsParticleSys : public ParticleSys {
 	glm::vec3 *d_pos, *h_pos;
 	glm::vec3  h_min,  h_max;
 	glm::vec3 *d_min, *d_max;
-	GridCount* m_grid;
+	Grid* m_grid;
 
 	glm::vec3 *d_separation, *d_cohesion, *d_alignement;
 	int *d_num_A, *d_num_B, *d_num_C;
@@ -137,7 +137,7 @@ struct BoidsParticleSys : public ParticleSys {
 
 	BoidsParticleSys(int numParticles, glm::vec3 min, glm::vec3 max, boids_sim_settings bss) : ParticleSys(numParticles), h_min(min), h_max(max)
 	{
-		m_grid = new GridCount(numParticles, glm::vec3(-50.0), glm::vec3(1.5), glm::ivec3(70));
+		m_grid = new Grid(numParticles, glm::vec3(-50.0), glm::vec3(1.5), glm::ivec3(70));
 		h_pos = new glm::vec3[numParticles];
 		h_vel = new glm::vec3[numParticles];
 		

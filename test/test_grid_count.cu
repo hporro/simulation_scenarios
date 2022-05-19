@@ -13,7 +13,7 @@
 #include "../include/gpuErrCheck.h"
 #include "../include/Logging.h"
 #include "../include/timing_helpers.h"
-#include "../grid2.h"
+#include "../gridCount.h"
 
 struct SaveNeighborsFunctor {
 	SaveNeighborsFunctor(float rad, int numP, int max_neighbors) : m_numP(numP), h_m_max_neighbors(max_neighbors) {

@@ -2,56 +2,24 @@
 
 #include "particleSys.h"
 #include "helper.cuh"
-#include "grid2.h"
+#include "gridCount.h"
 #include <algorithm>
 
 constexpr float H_PI = 3.141592653589793238462643383279502884197169399375105820974944592307816406286208;
 
 struct sph_sim_settings {
-	float k = 1000.0;
-	float viscosity = 250.0;
-	float density = 1000;
-	float gravity = -9.8;
-	glm::vec3 box_size = glm::vec3(100.0);
-	float spacing = (float)(0.5*100.0/pow(1000000,1.0/3.0));
+	glm::vec3 ExtForce = glm::vec3(0.0f, 1200. * -9.8, 0.0f);
+	float RestDensity = 1000.;
+	float GasConst = 2000.;
+	float KernelRadius = 2.0;
+	float PartMass = 65.;
+	float Viscosity = 250.;
+	float ColRestitution = 0.20f;
+	float Poly6 = 315.f / (65.f * H_PI * powf(KernelRadius, 9.f));
+	float SpikyGrad = -45.f / (H_PI * powf(KernelRadius, 6.f));
+	float ViscLap = 45.f / (H_PI * powf(KernelRadius, 6.f));
 	float dt = 0.001;
-	float h = (float)(2.0 * spacing);
-	float mass = (float)(pow(spacing, 3) * density);
-	float ColRestitution = 0.2;
 };
-
-__device__ float kernelM4(float x, sph_sim_settings* bss) {
-	const float q = x / bss->h;
-	if (q >= 1.f)
-		return 0.f;
-
-	const float factor = 2.546479089470325472 / pow(bss->h,3);
-	if (q < .5f)
-		return factor * (1.f - 6.f * q * q * (1 - q));
-	float a = 1.f - q;
-	return factor * 2.f * a * a * a;
-}
-
-__device__ float kernelM4_d(const float x, sph_sim_settings* bss) {
-	const float q = x / bss->h;
-
-	if (q >= 1.f)
-		return 0.f;
-
-	const float factor = 2.546479089470325472 / pow(bss->h,5) ;
-	if (q < .5f)
-		return factor * (-12.f + 18.f * q);
-
-	return factor * (-6.f * (1.f - q) * (1.f - q) / q);
-}
-
-__device__ float kernelVisc_dd(const float x, sph_sim_settings* bss) {
-	const float q = x / bss->h;
-	if (q <= 1.f)
-		return -45.f / (H_PI * pow(bss->h,5)) * (1 - q);
-
-	return 0.f;
-}
 
 struct sph_density_functor {
 	void resetVariables() {
@@ -63,10 +31,8 @@ struct sph_density_functor {
 		cudaMemset(pressure, 0.0, numParticles * sizeof(float));
 	}
 	__device__ void operator()(const int& i, const int& j, const glm::vec3 dist_vec, const double dist) {
-		if (dist >= d_bss->h)return;
-		rho[i] += kernelM4(dist, d_bss);
-		//rho[i] += 315. / (65. * H_PI * pow(d_bss->h, 9.f)) * pow(d_bss->h * d_bss->h - dist*dist, 3.);
-		//if(i==0)printf("RHO i: %d j: %d rho[i]: %f\n", i, j, rho[i]);
+		if (dist >= d_bss->KernelRadius)return;
+		rho[i] += d_bss->PartMass * d_bss->Poly6 * pow(d_bss->KernelRadius * d_bss->KernelRadius - dist*dist, 3.);
 	}
 	int numParticles;
 
@@ -80,13 +46,13 @@ struct sph_density_functor {
 struct sph_forces_functor {
 	__device__ void operator()(const int& i, const int& j, const glm::vec3 dist_vec, const double dist) {
 		if (i == j)return;
-		if (dist > d_bss->h)return;
-		//if (i == 0)printf("FORCES i: %d j: %d\n", i, j);
-		if (rho[i] <= 0.0) return;
-		f_viscosity[i]+= (vel[i] - vel[j]) * (d_bss->k / rho[i] * kernelVisc_dd(dist, d_bss));
-		//f_viscosity[i] += (vel[i] - vel[j]) * (d_bss->k / rho[i] * 45. / (H_PI * pow(d_bss->h, 6.f)) * (d_bss->h - dist));
-		f_pressure[i] -= (dist_vec)/dist * (0.5f * (pressure[i] + pressure[j]) / rho[i] * kernelM4_d(dist, d_bss));
-		//f_pressure[i] -= (dist_vec) / dist * (0.5f * (pressure[i] + pressure[j]) / rho[i] * -45. / (H_PI * pow(d_bss->h, 6.f)) * pow(d_bss->h - dist, 2.));
+		if (dist > d_bss->KernelRadius || dist<=0)return;
+
+		glm::vec3 dnorm = dist_vec/dist;
+		// pressureForce
+		f_pressure[i] += -dnorm * d_bss->PartMass * (pressure[i] + pressure[j]) / (2. * rho[i]) * d_bss->SpikyGrad * pow(d_bss->KernelRadius - dist, 2.);
+		// viscosityForce
+		f_viscosity[i] += (vel[j] - vel[i]) * d_bss->Viscosity * d_bss->PartMass / rho[i] * d_bss->ViscLap * (d_bss->KernelRadius - dist);
 	}
 	int numParticles;
 
@@ -102,15 +68,11 @@ __global__ void move_sph_w_walls(int numParticles, glm::vec3* pos, glm::vec3* ve
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i < numParticles) {
 		
-		//if (vel[i] != vel[i])printf("BEFORE i: %d vel: %f\n", i, glm::length(vel[i]));
-		glm::vec3 acel = (f_viscosity[i] + f_pressure[i])*(bss->mass/rho[i]) + glm::vec3(0.0,bss->gravity,0.0);
+		glm::vec3 acel = (f_viscosity[i] + f_pressure[i]+ bss->ExtForce)/rho[i];
 		if (acel != acel) {
-			acel = glm::vec3(0.0, bss->gravity, 0.0);
+			acel = bss->ExtForce;
 		}
-		//printf("acel: %f bss->dt: %f\n", glm::length(acel), bss->dt);
 		vel[i] += acel * bss->dt;
-		//printf("vel: %f\n", glm::length(vel[i]));
-		//if (vel[i] != vel[i])printf("rho[i]: %f\n", i, rho[i]);
 		pos[i] += vel[i] * bss->dt;
 
 
@@ -118,7 +80,7 @@ __global__ void move_sph_w_walls(int numParticles, glm::vec3* pos, glm::vec3* ve
 		glm::vec3 b(50.0);
 		//float d = sdBox(pos[i], b) + bss->h;
 		//glm::vec3 n = normal_bx(pos[i],b);
-		float d = sdCircle(pos[i], 50) + bss->h;
+		float d = sdCircle(pos[i], 50) + bss->KernelRadius;
 		glm::vec3 n = normal_circle(pos[i], 50);
 		if (d > 0.)
 		{
@@ -126,7 +88,7 @@ __global__ void move_sph_w_walls(int numParticles, glm::vec3* pos, glm::vec3* ve
 			vel[i] = reflect(vel[i], n);
 			d = glm::dot(vel[i], n);
 			vel[i] -= n * d * bss->ColRestitution;
-			//pos[i] += vel[i] * bss->dt;
+			pos[i] += vel[i] * bss->dt;
 		}
 	}
 }
@@ -134,8 +96,7 @@ __global__ void move_sph_w_walls(int numParticles, glm::vec3* pos, glm::vec3* ve
 __global__ void calc_pressure(int numParticles, float* pressure, float* rho, sph_sim_settings* d_bss) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i < numParticles) {
-		rho[i] *= d_bss->mass;
-		pressure[i] = h_max(0.f, d_bss->k * (rho[i] - d_bss->density));
+		pressure[i] = d_bss->GasConst * (rho[i] - d_bss->RestDensity);;
 	}
 }
 
@@ -176,8 +137,7 @@ struct SphParticleSys : public ParticleSys {
 		0[h_bss] = bss;
 		cudaMemcpy(d_bss, h_bss, sizeof(sph_sim_settings), cudaMemcpyHostToDevice);
 
-		printf("h size: %f\n", h_bss->h);
-		m_grid = new GridCount(numParticles, min, glm::vec3(h_bss->h), glm::ivec3(ceil(100.0 / h_bss->h)));
+		m_grid = new GridCount(numParticles, min, glm::vec3(h_bss->KernelRadius), glm::ivec3(ceil(100.0 / h_bss->KernelRadius)));
 			
 		int numx = 22;
 		int numy = 22;
@@ -188,7 +148,7 @@ struct SphParticleSys : public ParticleSys {
 				for (int x = 0; x < numx; x++){
 					int i = x + numx * (y + numy * z);
 					if (i >= numParticles)break;
-					h_pos[i] = glm::vec3(-15 + h_bss->spacing * (x + 0.5), -13 + h_bss->spacing * (y + 0.5), -10 + h_bss->spacing * (z + 0.5));
+					h_pos[i] = glm::vec3(-15 + h_bss->KernelRadius * (x + 0.5), -13 + h_bss->KernelRadius * (y + 0.5), -10 + h_bss->KernelRadius * (z + 0.5));
 					//h_pos[i] = glm::vec3(distx(rng), disty(rng), distz(rng));
 					h_vel[i] = glm::vec3(0.0f,0.0f,0.0f);
 				}
@@ -292,13 +252,12 @@ struct SphParticleSys : public ParticleSys {
 		p_func.vel = d_vel;
 		gpuErrchk(cudaGetLastError());
 
-
-		m_grid->apply_f_frnn<sph_density_functor>(d_func, d_pos, h_bss->h);
+		m_grid->apply_f_frnn<sph_density_functor>(d_func, d_pos, h_bss->KernelRadius);
 		cudaDeviceSynchronize();
 		gpuErrchk(cudaGetLastError());
 		calc_pressure<<<numBlocks + 1, blocksize >>>(numParticles, d_pressure, d_rho, d_bss);
 		cudaDeviceSynchronize();
-		m_grid->apply_f_frnn<sph_forces_functor>(p_func, d_pos, h_bss->h);
+		m_grid->apply_f_frnn<sph_forces_functor>(p_func, d_pos, h_bss->KernelRadius);
 		cudaDeviceSynchronize();
 		gpuErrchk(cudaGetLastError());
 
