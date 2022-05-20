@@ -148,13 +148,16 @@ void Grid::update(glm::vec3* pos, glm::vec3* vel) {
 	// find particle position in grid
 	gcalcHash <<<h_gridp->numP/1024+1,1024>>> (hash, partId, pos, d_gridp);
 	cudaDeviceSynchronize();
+	LOG_TIMING("Calc hash: {}", tim.swap_time());
 	// sort for reorder by part_id
 	dev_partId = thrust::device_pointer_cast(partId);
 	dev_hash = thrust::device_pointer_cast(hash);
-
 	cudaDeviceSynchronize();
+
+	tim.swap_time();
 	thrust::sort_by_key(thrust::device, dev_hash, dev_hash + h_gridp->numP, dev_partId);
 	cudaDeviceSynchronize();
+	LOG_TIMING("Sort by key: {}", tim.swap_time());
 	//print_int_vector << <h_gridp->dnbr / 1024 + 1, 1024 >> > (h_gridp->dnbr, hash, "hash");
 
 	// reset grid start/stop
@@ -168,11 +171,13 @@ void Grid::update(glm::vec3* pos, glm::vec3* vel) {
 	tim.swap_time();
 	gfindCellBounds <<<h_gridp->numP / 1024 + 1, 1024>>> (start, stop, hash, partId, pos, vel, pos_sorted, vel_sorted, d_gridp);
 	cudaDeviceSynchronize();
-	LOG_TIMING("findCellBounds: {}", tim.swap_time());
 	gpuErrchk(cudaGetLastError());
+	LOG_TIMING("findCellBounds: {}", tim.swap_time());
 
 	cudaMemcpy(pos, pos_sorted, h_gridp->numP * sizeof(glm::vec3), cudaMemcpyDeviceToDevice);
 	cudaMemcpy(vel, vel_sorted, h_gridp->numP * sizeof(glm::vec3), cudaMemcpyDeviceToDevice);
+	cudaDeviceSynchronize();
+	LOG_TIMING("Copy arrays: {}", tim.swap_time());
 
 	/*
 	// reorder position
@@ -194,10 +199,11 @@ void Grid::update(glm::vec3* pos) {
 
 	// find particle position in grid
 	gcalcHash <<<h_gridp->numP /1024+1,1024>>> (hash, partId, pos, d_gridp);
+	cudaDeviceSynchronize();
+	LOG_TIMING("Calc hash: {}", tim.swap_time());
 	//printf("Hash:");
 	//print_d_vec(h_gridp->numP, hash);
 
-	cudaDeviceSynchronize();
 	// sort for reorder by part_id
 	dev_partId = thrust::device_pointer_cast(partId);
 	dev_hash = thrust::device_pointer_cast(hash);
@@ -205,6 +211,7 @@ void Grid::update(glm::vec3* pos) {
 	cudaDeviceSynchronize();
 	thrust::sort_by_key(thrust::device, dev_hash, dev_hash + h_gridp->numP, dev_partId);
 	cudaDeviceSynchronize();
+	LOG_TIMING("Sort by key: {}", tim.swap_time());
 	//printf("sorted by key:");
 	//print_d_vec(h_gridp->numP, partId);
 	//print_d_vec(h_gridp->numP, hash);
@@ -228,6 +235,7 @@ void Grid::update(glm::vec3* pos) {
 
 	cudaMemcpy(pos, pos_sorted, h_gridp->numP * sizeof(glm::vec3), cudaMemcpyDeviceToDevice);
 	cudaDeviceSynchronize();
+	LOG_TIMING("Copy arrays: {}", tim.swap_time());
 
 	/*
 	// reorder position
@@ -251,7 +259,6 @@ __global__ void apply_f_frnn_kernel(Functor f, const glm::vec3* __restrict__ pos
 	if (i < dgrid->numP) {
 		const glm::vec3 pos_i = pos[i];
 		const int hi = calcHash(pos_i, dgrid);
-		const int nbCell = dgrid->tot_num_cells;
 
 		for (int a = -1; a <= 1; a++)
 			for (int b = -1; b <= 1; b++)

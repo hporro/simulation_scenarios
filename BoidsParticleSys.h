@@ -2,7 +2,7 @@
 
 #include "particleSys.h"
 #include "helper.cuh"
-#include "grid.h"
+#include "gridCount.h"
 #include <algorithm>
 
 #define EPSILON 0.000001
@@ -128,7 +128,7 @@ struct BoidsParticleSys : public ParticleSys {
 	glm::vec3 *d_pos, *h_pos;
 	glm::vec3  h_min,  h_max;
 	glm::vec3 *d_min, *d_max;
-	Grid* m_grid;
+	GridCount* m_grid;
 
 	glm::vec3 *d_separation, *d_cohesion, *d_alignement;
 	int *d_num_A, *d_num_B, *d_num_C;
@@ -137,12 +137,13 @@ struct BoidsParticleSys : public ParticleSys {
 
 	BoidsParticleSys(int numParticles, glm::vec3 min, glm::vec3 max, boids_sim_settings bss) : ParticleSys(numParticles), h_min(min), h_max(max)
 	{
-		m_grid = new Grid(numParticles, glm::vec3(-50.0), glm::vec3(1.5), glm::ivec3(70));
+		m_grid = new GridCount(numParticles, glm::vec3(-50.0), glm::vec3(1.5), glm::ivec3(70));
 		h_pos = new glm::vec3[numParticles];
 		h_vel = new glm::vec3[numParticles];
 		
 		std::random_device dev;
-		std::mt19937 rng(dev());
+		std::mt19937 rng{ dev() };;
+		rng.seed(10);
 		std::uniform_real_distribution<> distx(h_min.x, h_max.x);
 		std::uniform_real_distribution<> disty(h_min.x, h_max.x);
 		std::uniform_real_distribution<> distz(h_min.x, h_max.x);
@@ -236,17 +237,17 @@ struct BoidsParticleSys : public ParticleSys {
 
 		m_grid->update(d_pos,d_vel);
 		cudaDeviceSynchronize();
-		LOG_TIMING("Grid update: {} ms", grid_timer.swap_time());
+		LOG_TIMING("Grid update: {}", grid_timer.swap_time());
 
 		cff.pos = d_pos;
 		cff.vel = d_vel;
 		m_grid->apply_f_frnn<boids_neighbor_functor>(cff, d_pos, 1.5);
 		cudaDeviceSynchronize();
-		LOG_TIMING("Grid query: {} ms", grid_timer.swap_time());
+		LOG_TIMING("Grid query: {}", grid_timer.swap_time());
 
 		move_boids_w_walls <<<numBlocks, blocksize >>> (numParticles, d_pos, d_vel, d_min, d_max, 0.05, d_separation, d_cohesion, d_alignement, d_num_A, d_num_B, d_num_C, d_bss);
 		cudaDeviceSynchronize();
-		LOG_TIMING("Integration: {} ms", grid_timer.swap_time());
+		LOG_TIMING("Integration: {}", grid_timer.swap_time());
 
 		LOG_EVENT("Mean num of particles: {}", m_grid->mean_num_particle_in_cell());
 		LOG_TIMING("Calc mean num of particles: {}", grid_timer.swap_time());

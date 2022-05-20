@@ -67,7 +67,7 @@ void lattice_test() {
 	float rad = 1.0;
 	glm::vec3 min(0.0);
 	glm::vec3 cell_size(1.0);
-	glm::ivec3 num_cells(10);
+	glm::ivec3 num_cells(100);
 	Grid gc(numP, min, cell_size, num_cells);
 
 	SaveNeighborsFunctor* snfunctor = new SaveNeighborsFunctor(rad, numP, max_neighs);
@@ -89,10 +89,13 @@ void lattice_test() {
 	cudaMemcpy(d_pos, pos, numP * sizeof(glm::vec3), cudaMemcpyHostToDevice);
 	cudaDeviceSynchronize();
 
+	Timer grid_timer;
 	gc.update(d_pos);
 	cudaDeviceSynchronize();
+	LOG_TIMING("[lattice_test] Grid update: {} ms", grid_timer.swap_time());
 	gc.apply_f_frnn<SaveNeighborsFunctor>(*snfunctor, d_pos, rad);
 	cudaDeviceSynchronize();
+	LOG_TIMING("[lattice_test] Grid query: {} ms", grid_timer.swap_time());
 
 	int* h_num_neighbors = new int[numP];
 	int* h_neighbors = new int[numP * max_neighs];
@@ -106,6 +109,9 @@ void lattice_test() {
 
 	for (int i = 0; i < numP; i++) {
 		res_num_neighs[i] = 0;
+
+		//if(i%1000)printProgress((double)i * (1.0 / (double)numP));
+
 		for (int j = 0; j < numP; j++) {
 			if (i == j)continue;
 			glm::vec3 dist_vec = pos[i] - pos[j];
@@ -162,10 +168,13 @@ void packed_lattice_test() {
 	cudaMemcpy(d_pos, pos, numP * sizeof(glm::vec3), cudaMemcpyHostToDevice);
 	cudaDeviceSynchronize();
 
+	Timer grid_timer;
 	gc.update(d_pos);
 	cudaDeviceSynchronize();
+	LOG_TIMING("[packed_lattice_test] Grid update: {} ms", grid_timer.swap_time());
 	gc.apply_f_frnn<SaveNeighborsFunctor>(*snfunctor, d_pos, rad);
 	cudaDeviceSynchronize();
+	LOG_TIMING("[packed_lattice_test] Grid query: {} ms", grid_timer.swap_time());
 
 	int* h_num_neighbors = new int[numP];
 	int* h_neighbors = new int[numP * max_neighs];
