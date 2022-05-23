@@ -249,10 +249,10 @@ void GridCount::sort_hashed(glm::vec3* pos) {
 template<class Functor>
 __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restrict__ pos, int* __restrict__ count_keys, int* __restrict__ cumulative_count_keys, float rad2, GridCount_data* gcdata) {
 	const int i = threadIdx.x + (blockDim.x * blockIdx.x);
-	int const num_x = gcdata->num_cells.x;
-	int const num_y = gcdata->num_cells.y;
-	int const num_z = gcdata->num_cells.z;
 	if (i < numP) {
+		int const num_x = gcdata->num_cells.x;
+		int const num_y = gcdata->num_cells.y;
+		int const num_z = gcdata->num_cells.z;
 		const glm::vec3 pos_i = pos[i];
 		int hi = calcHash(pos_i, gcdata);
 		//printf("i: %d hi: %d pos[i]: %f %f %f\n", i, hi, pos_i.x, pos_i.y, pos_i.z);
@@ -261,7 +261,8 @@ __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restric
 			for (int ddy = -1; ddy <= 1; ddy++) {
 				for (int ddz = -1; ddz <= 1; ddz++) {
 					int h = hi + ddx + (ddz * num_y + ddy) * num_x;
-					h += (h > gcdata->tot_num_cells ? -gcdata->tot_num_cells : 0) + (h < 0 ? gcdata->tot_num_cells : 0); // border case. The particles in the border also check for neighbors in the oposite borders
+					//h += (h > gcdata->tot_num_cells ? -gcdata->tot_num_cells : 0) + (h < 0 ? gcdata->tot_num_cells : 0); // border case. The particles in the border also check for neighbors in the oposite borders
+					if (h > gcdata->tot_num_cells || h < 0)continue;
 					//if(i==0)printf("i: %d h: %d num_cell_neighs: %d\n", i, h, cumulative_count_keys[h] + count_keys[h]);
 					for (int j = cumulative_count_keys[h]; j < cumulative_count_keys[h] + count_keys[h]; j++) {
 						const glm::vec3 sub_vector = pos[j] - pos_i;

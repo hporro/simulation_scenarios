@@ -99,6 +99,7 @@ __global__ void gfindCellBounds_s_vel(int* start, int* stop, const int* __restri
 }
 
 Grid::Grid(int numP, glm::vec3 min, glm::vec3 cell_size, glm::ivec3 num_cells) {
+	gpuErrchk(cudaGetLastError());
 	h_gridp = new grid_t[1];
 	h_gridp[0].min = min;
 	h_gridp[0].cell_size = cell_size;
@@ -107,7 +108,9 @@ Grid::Grid(int numP, glm::vec3 min, glm::vec3 cell_size, glm::ivec3 num_cells) {
 	h_gridp[0].numP = numP;
 
 	cudaMalloc(&this->d_gridp, sizeof(grid_t));
+	gpuErrchk(cudaGetLastError());
 	cudaMemcpy(d_gridp, &h_gridp[0], sizeof(grid_t), cudaMemcpyHostToDevice);
+	gpuErrchk(cudaGetLastError());
 
 	cudaMalloc(&this->start, sizeof(int) * h_gridp->tot_num_cells);
 	cudaMalloc(&this->stop, sizeof(int) * h_gridp->tot_num_cells);
@@ -115,22 +118,25 @@ Grid::Grid(int numP, glm::vec3 min, glm::vec3 cell_size, glm::ivec3 num_cells) {
 	cudaMalloc(&this->partId, sizeof(int) * h_gridp->numP);
 	cudaMalloc(&this->pos_sorted, sizeof(glm::vec3) * numP);
 	cudaMalloc(&this->vel_sorted, sizeof(glm::vec3) * numP);
+	gpuErrchk(cudaGetLastError());
 	//*d_gridp = *h_gridp;
 	cudaDeviceSynchronize();
 	this->dev_start = thrust::device_pointer_cast(this->start);
 	this->dev_stop = thrust::device_pointer_cast(this->stop);
 	this->dev_hash = thrust::device_pointer_cast(this->hash);
+	gpuErrchk(cudaGetLastError());
 }
 
 Grid::~Grid() {
-	cudaFree(&this->start);
-	cudaFree(&this->stop);
-	cudaFree(&this->hash);
-	cudaFree(&this->partId);
-	cudaFree(&this->pos_sorted);
-	cudaFree(&this->vel_sorted);
-	cudaFree(&this->d_gridp);
+	cudaFree(this->start);
+	cudaFree(this->stop);
+	cudaFree(this->hash);
+	cudaFree(this->partId);
+	cudaFree(this->pos_sorted);
+	cudaFree(this->vel_sorted);
+	cudaFree(this->d_gridp);
 	delete h_gridp;
+	gpuErrchk(cudaGetLastError());
 }
 
 template<typename T>
@@ -251,12 +257,13 @@ void Grid::update(glm::vec3* pos) {
 }
 
 template<class Functor>
-__global__ void apply_f_frnn_kernel(Functor f, const glm::vec3* __restrict__ pos, const int* __restrict__ start, const int* __restrict__ stop, const float rad2, grid_t *dgrid, int* __restrict__ ind) {
+__global__ void apply_f_frnn_kernel(Functor f, const glm::vec3* __restrict__ pos, const int* __restrict__ start, const int* __restrict__ stop, const double rad2, grid_t *dgrid, int* __restrict__ ind) {
 	const int i = blockIdx.x * blockDim.x + threadIdx.x;
-	int const num_x = dgrid->num_cells.x;
-	int const num_y = dgrid->num_cells.y;
-	int const num_z = dgrid->num_cells.z;
 	if (i < dgrid->numP) {
+		int const num_x = dgrid->num_cells.x;
+		int const num_y = dgrid->num_cells.y;
+		int const num_z = dgrid->num_cells.z;
+
 		const glm::vec3 pos_i = pos[i];
 		const int hi = calcHash(pos_i, dgrid);
 
@@ -264,11 +271,13 @@ __global__ void apply_f_frnn_kernel(Functor f, const glm::vec3* __restrict__ pos
 			for (int b = -1; b <= 1; b++)
 				for (int c = -1; c <= 1; c++) {
 					int current = hi + a + (c * num_y + b) * num_x;
-					current += (current > dgrid->tot_num_cells ? -dgrid->tot_num_cells : 0) + (current < 0 ? dgrid->tot_num_cells : 0); // border case. The particles in the border also check for neighbors in the oposite borders
+					//current += (current > dgrid->tot_num_cells ? -dgrid->tot_num_cells : 0) + (current < 0 ? dgrid->tot_num_cells : 0); // border case. The particles in the border also check for neighbors in the oposite borders
+					//if(i==0)printf("i: %d current: %d start[current]: %d stop[current]: %d\n", i, current, start[current], stop[current]);
+					if (current > dgrid->tot_num_cells || current < 0)continue;
 					for (int j = start[current]; j <= stop[current]; j++) {
 						//printf("i: %d current: %d j: %d start[current]: %d\n", i, current, j , start[current]);
 						const glm::vec3 sub_vector = pos[j] - pos_i;
-						float r2 = glm::dot(sub_vector, sub_vector);
+						double r2 = glm::dot(sub_vector, sub_vector);
 						//printf("FRNN hi: %d h: %d i: %d j: %d r2: %f r: %f pos[i]: %f %f %f pos[j]: %f %f %f dist_vec: %f %f %f\n", hi, h, i, j, r2, sqrt(r2), pos_i.x, pos_i.y, pos_i.z, pos[j].x, pos[j].y, pos[j].z, sub_vector.x, sub_vector.y, sub_vector.z);
 						if (r2 <= rad2) f(i, j, sub_vector, sqrt(r2));
 					}
