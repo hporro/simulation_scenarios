@@ -172,6 +172,7 @@ struct ParticleSystemRenderer2d {
 		//glEnable(GL_BLEND);
 		glDrawArraysInstanced(GL_TRIANGLES, 0, 6, psys->numParticles);
 		psys_sp.unuse();
+		GLCHECKERR();
 
 		if (show_cube) {
 			cube_sp.use();
