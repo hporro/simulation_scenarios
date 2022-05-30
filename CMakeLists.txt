@@ -51,23 +51,19 @@ file(COPY ${CMAKE_SOURCE_DIR}/shaders DESTINATION ${CMAKE_BINARY_DIR})
 
 # ------------- SIMULATIONS ----------------
 
-add_executable(SPH simulations/SPH.cu ${IMGUI_SRCs})
-target_link_libraries(SPH
+function(make_simulation_target target_name)
+add_executable(${target_name} ${ARGN})
+target_link_libraries(${target_name}
 	PRIVATE BATEA_RENDER
 	PRIVATE BATEA_MATH
 )
+target_compile_options(${target_name} PRIVATE -Wall)
+target_include_directories(${target_name} PRIVATE lib/spdlog/include lib/imgui include)
+endfunction()
 
-target_compile_options(SPH PRIVATE -Wall)
-target_include_directories(SPH PRIVATE lib/spdlog/include lib/imgui include)
-
-add_executable(boids simulations/boids.cu ${IMGUI_SRCs})
-target_link_libraries(boids
-	PRIVATE BATEA_RENDER
-	PRIVATE BATEA_MATH
-)
-
-target_compile_options(boids PRIVATE -Wall)
-target_include_directories(boids PRIVATE lib/spdlog/include lib/imgui include)
+make_simulation_target(SPH simulations/SPH.cu)
+make_simulation_target(boids simulations/boids.cu)
+make_simulation_target(boids2d simulations/boids2d.cu)
 
 # ------------- PLAYGROUND ----------------
 
