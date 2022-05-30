@@ -14,6 +14,6 @@ out vec4 viewPos;
 
 void main() {
 	quadPos = (aQuadPos/0.05).xy;
-	viewPos = (u_view * (u_model * vec4(aPos, 1.0f)) + vec4(aQuadPos * u_radius, 0.0));
+	viewPos = (u_view * (u_model * vec4(aPos, 1.0f)) + vec4(aQuadPos, 0.0) * u_radius);
 	gl_Position = u_projection * viewPos;
 }

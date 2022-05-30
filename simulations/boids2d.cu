@@ -52,7 +52,7 @@ struct MyApp : public Application {
 			boids_changed |= ImGui::DragFloat("Strength of separation", &psys.h_bss->A_FORCE, 0.1, 0.1, 10.0);
 			boids_changed |= ImGui::DragFloat("Strength of cohesion", &psys.h_bss->B_FORCE, 0.1, 0.1, 10.0);
 			boids_changed |= ImGui::DragFloat("Strength of alignement", &psys.h_bss->C_FORCE, 0.1, 0.1, 10.0);
-			boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 1.0, 1.0, 40.0);
+			boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 0.3, 0.1, 2.0);
 
 			ImGui::End();
 

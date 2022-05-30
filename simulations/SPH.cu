@@ -21,7 +21,9 @@ struct MyApp : public Application {
 
 	MyApp(int width, int height, std::string title) : Application(width, height, std::move(title)), 
 		psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), { }),
-		psr(&psys) {}
+		psr(&psys) {
+		psr.radius = 21.6;
+	}
 	void run() {
 		Timer dtTimer;
 		while (!glfwWindowShouldClose(window)) {
