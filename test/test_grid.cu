@@ -10,30 +10,23 @@
 #include "glm/vec3.hpp"
 #include "glm/glm.hpp"
 
-#include "../include/gpuErrCheck.h"
-#include "../include/Logging.h"
-#include "../include/timing_helpers.h"
-#include "../grid.h"
+#include "../src/gpu/gpuErrCheck.h"
+#include "../src/logging/Logging.h"
+#include "../src/timing/timing_helpers.h"
+#include "../src/data_structures/grid.h"
 
 struct SaveNeighborsFunctor {
 	SaveNeighborsFunctor(float rad, int numP, int max_neighbors) : m_numP(numP), h_m_max_neighbors(max_neighbors) {
-		gpuErrchk(cudaGetLastError());
 		cudaMalloc(&m_rad, sizeof(float));
-		gpuErrchk(cudaGetLastError());
 		cudaMalloc(&m_max_neighbors, sizeof(int));
-		gpuErrchk(cudaGetLastError());
 		cudaMalloc(&m_num_neighbors, numP * sizeof(int));
-		gpuErrchk(cudaGetLastError());
 		cudaMalloc(&m_neighbors, max_neighbors * numP * sizeof(int));
-		gpuErrchk(cudaGetLastError());
 		cudaDeviceSynchronize();
-		gpuErrchk(cudaGetLastError());
 
 		cudaMemcpy(m_rad, &rad, sizeof(float), cudaMemcpyHostToDevice);
 		cudaMemcpy(m_max_neighbors, &h_m_max_neighbors, sizeof(int), cudaMemcpyHostToDevice);
 		cudaDeviceSynchronize();	
 		gpuErrchk(cudaGetLastError());
-
 	}
 	~SaveNeighborsFunctor() {
 		//cudaFree(m_rad);
@@ -65,16 +58,12 @@ struct CountNeighborsFunctor {
 	CountNeighborsFunctor(float rad, int numP) : m_numP(numP) {
 		gpuErrchk(cudaGetLastError());
 		cudaMalloc((void**)&m_rad, sizeof(float));
-		gpuErrchk(cudaGetLastError());
 		cudaMalloc((void**)&m_num_neighbors, numP * sizeof(int));
-		gpuErrchk(cudaGetLastError());
 		cudaDeviceSynchronize();
-		gpuErrchk(cudaGetLastError());
 
 		cudaMemcpy(m_rad, &rad, sizeof(float), cudaMemcpyHostToDevice);
 		cudaDeviceSynchronize();
 		gpuErrchk(cudaGetLastError());
-
 	}
 	~CountNeighborsFunctor() {
 		//cudaFree(m_rad);
@@ -96,16 +85,6 @@ struct CountNeighborsFunctor {
 	float* m_rad;
 	int* m_num_neighbors;
 };
-
-int calcHash_h(glm::vec3 p, grid_t* gcdata) {
-	p -= gcdata->min;
-	//printf("p: %f %f %f\n", p.x, p.y, p.z);
-	int x = p.x / gcdata->cell_size.x;
-	int y = p.y / gcdata->cell_size.y;
-	int z = p.z / gcdata->cell_size.z;
-	//printf("p: %f %f %f\n", p.x, p.y, p.z);
-	return (z * gcdata->num_cells.y + y) * gcdata->num_cells.x + x;
-}
 
 void lattice_test() {
 	int numP = 1000;
@@ -163,7 +142,7 @@ void lattice_test() {
 			glm::vec3 dist_vec = pos[i] - pos[j];
 			float dist = glm::dot(dist_vec, dist_vec);
 			if (dist <= rad * rad) {
-				//printf("i: %d j: %d hi: %d hj: %d pos[i]: %f %f %f pos[j]: %f %f %f dist: %f\n", i, j, calcHash_h(pos[i], gc.h_gridp), calcHash_h(pos[j], gc.h_gridp), pos[i].x, pos[i].y, pos[i].z, pos[j].x, pos[j].y, pos[j].z, sqrt(dist));
+				//printf("i: %d j: %d hi: %d hj: %d pos[i]: %f %f %f pos[j]: %f %f %f dist: %f\n", i, j, calcHash(pos[i], gc.h_gridp), calcHash(pos[j], gc.h_gridp), pos[i].x, pos[i].y, pos[i].z, pos[j].x, pos[j].y, pos[j].z, sqrt(dist));
 				res_num_neighs[i]++;
 			}
 		}
@@ -242,7 +221,7 @@ void packed_lattice_test() {
 			glm::vec3 dist_vec = pos[i] - pos[j];
 			float dist = glm::dot(dist_vec, dist_vec);
 			if (dist <= rad * rad) {
-				//printf("i: %d j: %d hi: %d hj: %d pos[i]: %f %f %f pos[j]: %f %f %f dist: %f\n", i, j, calcHash_h(pos[i], gc.h_gridp), calcHash_h(pos[j], gc.h_gridp), pos[i].x, pos[i].y, pos[i].z, pos[j].x, pos[j].y, pos[j].z, sqrt(dist));
+				//printf("i: %d j: %d hi: %d hj: %d pos[i]: %f %f %f pos[j]: %f %f %f dist: %f\n", i, j, calcHash(pos[i], gc.h_gridp), calcHash(pos[j], gc.h_gridp), pos[i].x, pos[i].y, pos[i].z, pos[j].x, pos[j].y, pos[j].z, sqrt(dist));
 				res_num_neighs[i]++;
 			}
 		}
@@ -318,7 +297,7 @@ void random_points_test() {
 			float dist = glm::dot(dist_vec, dist_vec);
 			const double EPS = 0.0001;
 			if ((dist - EPS) <= (rad * rad) || (sqrt(dist - EPS) <= rad)) {
-				//printf("i: %d j: %d hi: %d hj: %d pos[i]: %f %f %f pos[j]: %f %f %f dist: %f\n", i, j, calcHash_h(pos[i], gc.h_gcdata), calcHash_h(pos[j], gc.h_gcdata), pos[i].x, pos[i].y, pos[i].z, pos[j].x, pos[j].y, pos[j].z, sqrt(dist));
+				//printf("i: %d j: %d hi: %d hj: %d pos[i]: %f %f %f pos[j]: %f %f %f dist: %f\n", i, j, calcHash(pos[i], gc.h_gcdata), calcHash(pos[j], gc.h_gcdata), pos[i].x, pos[i].y, pos[i].z, pos[j].x, pos[j].y, pos[j].z, sqrt(dist));
 				res_num_neighs[i]++;
 			}
 		}
@@ -399,7 +378,7 @@ void more_packed_lattice_test() {
 			double dist = glm::dot(dist_vec, dist_vec);
 			const double EPS = 0.0001;
 			if ((dist-EPS)<= (rad*rad) || (sqrt(dist-EPS) <= rad)) {
-				//printf("i: %d j: %d hi: %d hj: %d pos[i]: %f %f %f pos[j]: %f %f %f dist: %f\n", i, j, calcHash_h(pos[i], gc.h_gcdata), calcHash_h(pos[j], gc.h_gcdata), pos[i].x, pos[i].y, pos[i].z, pos[j].x, pos[j].y, pos[j].z, sqrt(dist));
+				//printf("i: %d j: %d hi: %d hj: %d pos[i]: %f %f %f pos[j]: %f %f %f dist: %f\n", i, j, calcHash(pos[i], gc.h_gcdata), calcHash(pos[j], gc.h_gcdata), pos[i].x, pos[i].y, pos[i].z, pos[j].x, pos[j].y, pos[j].z, sqrt(dist));
 				res_num_neighs[i]++;
 			}
 		}
@@ -424,7 +403,7 @@ void more_packed_lattice_test() {
 				double dist = glm::dot(dist_vec, dist_vec);
 				const double EPS = 0.0001;
 				if ((dist - EPS) <= (rad * rad) || (sqrt(dist - EPS) <= rad)) {
-					printf("i: %d j: %d hi: %d hj: %d pos[i]: %f %f %f pos[j]: %f %f %f dist: %f\n", i, j, calcHash_h(pos[i], gc.h_gridp), calcHash_h(pos[j], gc.h_gridp), pos[i].x, pos[i].y, pos[i].z, pos[j].x, pos[j].y, pos[j].z, sqrt(dist));
+					printf("i: %d j: %d hi: %d hj: %d pos[i]: %f %f %f pos[j]: %f %f %f dist: %f\n", i, j, calcHash(pos[i], gc.h_gridp), calcHash(pos[j], gc.h_gridp), pos[i].x, pos[i].y, pos[i].z, pos[j].x, pos[j].y, pos[j].z, sqrt(dist));
 					res_num_neighs[i]++;
 				}
 			}
@@ -443,15 +422,10 @@ void more_packed_lattice_test() {
 }
 
 int main() {
-	gpuErrchk(cudaGetLastError());
 	init_logging();
-	gpuErrchk(cudaGetLastError());
 	RUN(lattice_test);
-	gpuErrchk(cudaGetLastError());
 	RUN(packed_lattice_test);
-	gpuErrchk(cudaGetLastError());
-	RUN(more_packed_lattice_test); // -> this test fails, and I think is because of numerical issues.
-	gpuErrchk(cudaGetLastError());
-	RUN(random_points_test); // -> oftentimes fails with 1 or 2 neighbors off. I also think this is due numerical issues/ It also fails at the end, idk why
+	RUN(more_packed_lattice_test); 
+	RUN(random_points_test);
 	return TEST_REPORT();
 }

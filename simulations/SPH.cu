@@ -1,12 +1,12 @@
-#include "Application.h"
+#include "../src/rendering/Application.h"
 
 #include <cuda_runtime.h>
 #include <cuda.h>
 #include <glm/glm.hpp>
 
-#include "particleSys.h"
-#include "sphParticleSys.h"
-#include "particleSysRenderer.h"
+#include "../src/particle_sys/particleSys.h"
+#include "../src/particle_sys/sphParticleSys.h"
+#include "../src/rendering/particleSysRenderer.h"
 
 constexpr int NUM_PARTICLES = 10000;
 #define TWOPI 6.2831853072
@@ -14,6 +14,8 @@ constexpr int NUM_PARTICLES = 10000;
 struct MyApp : public Application {
 	SphParticleSys psys;
 	ParticleSystemRenderer psr;
+
+
 	int sim_frames_per_frame = 1;
 	bool run_simulation = true;
 

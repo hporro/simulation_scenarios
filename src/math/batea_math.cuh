@@ -1,5 +1,10 @@
 #pragma once
 
+#include <glm/glm.hpp>
+
+constexpr float H_PI = 3.141592653589793238462643383279502884197169399375105820974944592307816406286208;
+constexpr float EPSILON = 0.000001;
+
 __device__ float clamp(float val, float min, float max) {
 	if (val < min)return min;
 	if (val > max)return max;
@@ -16,7 +21,6 @@ __device__ glm::vec3 operator/(glm::vec3 v, float a) {
 	return glm::vec3(v.x / a, v.y / a, v.z / a);
 }
 
-
 __device__ float sdCircle(glm::vec3 p, float r)
 {
 	return glm::length(p) - r;
@@ -32,7 +36,6 @@ __device__ glm::vec3 normal_circle(glm::vec3 p, float r) // for function f(p)
 		sdCircle(p + dy, r) - sdCircle(p - dy, r),
 		sdCircle(p + dz, r) - sdCircle(p - dz, r)));
 }
-
 
 template<class T>
 __device__ T h_max(T a, T b) {

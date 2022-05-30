@@ -1,12 +1,12 @@
-#include "Application.h"
+#include "../src/rendering/Application.h"
 
 #include <cuda_runtime.h>
 #include <cuda.h>
-#include <glm/glm.hpp>
 
-#include "particleSys.h"
-#include "BoidsParticleSys.h"
-#include "particleSysRenderer.h"
+#include "../src/math/batea_math.cuh"
+#include "../src/particle_sys/particleSys.h"
+#include "../src/particle_sys/BoidsParticleSys.h"
+#include "../src/rendering/particleSysRenderer.h"
 
 constexpr int NUM_PARTICLES = 1000000;
 #define TWOPI 6.2831853072

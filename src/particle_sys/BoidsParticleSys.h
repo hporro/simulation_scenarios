@@ -1,11 +1,9 @@
 #pragma once
 
 #include "particleSys.h"
-#include "helper.cuh"
-#include "gridCount.h"
+#include "../math/batea_math.cuh"
+#include "../data_structures/gridCount.h"
 #include <algorithm>
-
-#define EPSILON 0.000001
 
 struct boids_sim_settings {
 	float RADA = 0.6; // separation

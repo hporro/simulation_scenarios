@@ -3,9 +3,11 @@
 #include "cuda_gl_interop.h"
 #include "glm/vec3.hpp"
 #include "glm/glm.hpp"
+
 #include <random>
-#include "glErrCheck.h"
-#include "gpuErrCheck.h"
+
+#include "../rendering/glErrCheck.h"
+#include "../gpu/gpuErrCheck.h"
 
 
 struct ParticleSys {

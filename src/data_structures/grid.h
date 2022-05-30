@@ -39,7 +39,7 @@ struct Grid {
 	grid_t *h_gridp, *d_gridp;
 };
 
-__device__ int calcHash(glm::vec3 p, grid_t* __restrict__ gcdata) {
+__host__ __device__ int calcHash(glm::vec3 p, grid_t* __restrict__ gcdata) {
 	p -= gcdata->min;
 	//printf("p: %f %f %f\n", p.x, p.y, p.z);
 	int x = p.x / gcdata->cell_size.x;

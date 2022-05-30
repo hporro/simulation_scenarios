@@ -1,11 +1,9 @@
 #pragma once
 
 #include "particleSys.h"
-#include "helper.cuh"
-#include "gridCount.h"
+#include "../math/batea_math.cuh"
+#include "../data_structures/gridCount.h"
 #include <algorithm>
-
-constexpr float H_PI = 3.141592653589793238462643383279502884197169399375105820974944592307816406286208;
 
 struct sph_sim_settings {
 	glm::vec3 ExtForce = glm::vec3(0.0f, 1200. * -9.8, 0.0f);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "particleSys.h"
+#include "../particle_sys/particleSys.h"
 #include "Shader.h"
 
 #include <glm/glm.hpp>
