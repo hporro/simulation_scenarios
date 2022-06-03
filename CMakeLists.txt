@@ -13,6 +13,7 @@ add_definitions(-DGLEW_STATIC)
 add_subdirectory(lib/glfw EXCLUDE_FROM_ALL)
 add_subdirectory(lib/glew EXCLUDE_FROM_ALL)
 add_subdirectory(lib/glm EXCLUDE_FROM_ALL)
+add_subdirectory(lib/mcleap EXCLUDE_FROM_ALL)
 
 # --------------- BATEA LOGGING ---------------
 add_library(BATEA_LOGGING src/logging/Logging.cpp)
@@ -49,6 +50,7 @@ target_include_directories(BATEA_RENDER PUBLIC lib/imgui)
 
 file(COPY ${CMAKE_SOURCE_DIR}/shaders DESTINATION ${CMAKE_BINARY_DIR})
 
+
 # ------------- SIMULATIONS ----------------
 
 function(make_simulation_target target_name)
@@ -56,9 +58,10 @@ add_executable(${target_name} ${ARGN})
 target_link_libraries(${target_name}
 	PRIVATE BATEA_RENDER
 	PRIVATE BATEA_MATH
+	PRIVATE MCleap
 )
 target_compile_options(${target_name} PRIVATE -Wall)
-target_include_directories(${target_name} PRIVATE lib/spdlog/include lib/imgui include)
+target_include_directories(${target_name} PRIVATE lib/spdlog/include lib/imgui include lib/mcleap/include)
 endfunction()
 
 make_simulation_target(SPH simulations/SPH.cu)
