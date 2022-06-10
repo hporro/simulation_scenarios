@@ -2,7 +2,7 @@
 
 #include "particleSys.h"
 #include "../math/batea_math.cuh"
-#include "../data_structures/mcleap_wrapper.h"
+#include "../data_structures/gridCount2d.h"
 #include <algorithm>
 
 struct boids_sim_settings {
@@ -124,7 +124,7 @@ struct Boids2dParticleSys : public ParticleSys {
 	glm::vec2* d_pos, * h_pos;
 	glm::vec2  h_min, h_max;
 	glm::vec2* d_min, * d_max;
-	triangulation2d<50,50>* m_grid;
+	GridCount2d* m_grid;
 
 	glm::vec2* d_separation, * d_cohesion, * d_alignement;
 	int* d_num_A, * d_num_B, * d_num_C;
@@ -133,7 +133,7 @@ struct Boids2dParticleSys : public ParticleSys {
 
 	Boids2dParticleSys(int numParticles, glm::vec2 min, glm::vec2 max, boids_sim_settings bss) : ParticleSys(numParticles), h_min(min), h_max(max)
 	{
-		m_grid = new triangulation2d<50, 50>(numParticles);
+		m_grid = new GridCount2d(numParticles, glm::vec2(-50.0), glm::vec2(1.5), glm::uvec2(70));
 		h_pos = new glm::vec2[numParticles];
 		h_vel = new glm::vec2[numParticles];
 
@@ -194,16 +194,6 @@ struct Boids2dParticleSys : public ParticleSys {
 		gpuErrchk(cudaGraphicsGLRegisterBuffer(&vbo_pos_cuda, vbo_pos, cudaGraphicsMapFlagsNone));
 		gpuErrchk(cudaGraphicsGLRegisterBuffer(&vbo_vel_cuda, vbo_vel, cudaGraphicsMapFlagsNone));
 		GLCHECKERR();
-
-		size_t bytes = 0;
-		gpuErrchk(cudaGraphicsMapResources(1, &vbo_pos_cuda, 0));
-		gpuErrchk(cudaGraphicsResourceGetMappedPointer((void**)&d_pos, &bytes, vbo_pos_cuda));
-		gpuErrchk(cudaGraphicsMapResources(1, &vbo_vel_cuda, 0));
-		gpuErrchk(cudaGraphicsResourceGetMappedPointer((void**)&d_vel, &bytes, vbo_vel_cuda));
-		m_grid->build(d_pos);
-		gpuErrchk(cudaGraphicsUnmapResources(1, &vbo_pos_cuda, 0));
-		gpuErrchk(cudaGraphicsUnmapResources(1, &vbo_vel_cuda, 0));
-
 
 		LOG_EVENT("Boids particle system initialized with {} particles", numParticles);
 	}

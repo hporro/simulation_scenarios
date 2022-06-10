@@ -15,7 +15,6 @@ struct MyApp : public Application {
 	SphParticleSys psys;
 	ParticleSystemRenderer psr;
 
-
 	int sim_frames_per_frame = 1;
 	bool run_simulation = true;
 

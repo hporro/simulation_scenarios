@@ -1,15 +1,25 @@
 #include <cuda.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <stdio.h>
-
-
-glm::vec3 operator*(glm::vec3 v, float a) {
-	return glm::vec3(v.x * a, v.y * a, v.z * a);
-}
+#include <random>
+#include <MCleap.h>
 
 int main(int argc, char** argv)
 {
-	glm::vec3 a(10.0, 20.0, 2.0);
-	a = glm::normalize(a) * 5.0;
-	printf("a: %f, %f, %f\n", a.x, a.y, a.z);
+
+	constexpr int numParticles = 10000;
+	double* h_pos;
+	h_pos = new double[2*numParticles];
+
+	std::random_device dev;
+	std::mt19937 rng{ dev() };;
+	rng.seed(10);
+	std::uniform_real_distribution<> distx(-100.0, 100.0);
+
+	for (int i = 0; i < 2*numParticles; i++) {
+		h_pos[i] = distx(rng);
+	}
+
+	MCleap::build_triangulation_from_buffer(numParticles, (MCleap::MCLEAP_REAL*)h_pos);
 }

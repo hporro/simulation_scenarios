@@ -83,35 +83,29 @@ GridCount2d::~GridCount2d() {
 	gpuErrchk(cudaGetLastError());
 }
 
-__device__ int calcHash(glm::vec2 p, GridCount2d_data* __restrict__ gcdata) {
-	p -= gcdata->min;
-	//printf("p: %f %f %f\n", p.x, p.y, p.z);
-	int x = p.x / gcdata->cell_size.x;
-	int y = p.y / gcdata->cell_size.y;
-	//printf("p: %f %f %f\n", p.x, p.y, p.z);
+__device__ unsigned int calcHash(unsigned int x, unsigned int y, GridCount2d_data* __restrict__ gcdata) {
 	return y * gcdata->num_cells.x + x;
+}
+
+__device__ glm::ivec2 calc_hashxy(glm::vec2 p, GridCount2d_data* __restrict__ gcdata) {
+	p -= gcdata->min;
+	int x = (p.x / gcdata->cell_size.x);
+	int y = (p.y / gcdata->cell_size.y);
+	x %= gcdata->num_cells.x;
+	y %= gcdata->num_cells.y;
+	return glm::ivec2(x, y);
+}
+
+__device__ unsigned int calcHash(glm::vec2 p, GridCount2d_data* __restrict__ gcdata) {
+	glm::ivec2 x = calc_hashxy(p,gcdata);
+	return calcHash(x.x,x.y,gcdata);
 }
 
 __global__ void calc_hash_kernel(int numP, glm::vec2* __restrict__ pos, int* hash, GridCount2d_data* __restrict__ gcdata) {
 	const int i = threadIdx.x + (blockDim.x * blockIdx.x);
 	if (i < numP) {
 		hash[i] = calcHash(pos[i], gcdata);
-		//printf("i: %d hash[i]: %d\n", i, hash[i]);
 	}
-}
-
-template<class T>
-void print_d_vec(int n, T* d_vec) {
-	T* h_vec = new T[n];
-	cudaMemcpy(h_vec, d_vec, n * sizeof(T), cudaMemcpyDeviceToHost);
-	cudaDeviceSynchronize();
-
-	for (int i = 0; i < n; i++) {
-		printf("%d ", h_vec[i]);
-	}
-	std::cout << std::endl;
-
-	delete[] h_vec;
 }
 
 void GridCount2d::update(glm::vec2* pos, glm::vec2* vel) {
@@ -125,8 +119,6 @@ void GridCount2d::update(glm::vec2* pos, glm::vec2* vel) {
 void GridCount2d::update(glm::vec2* pos) {
 	calc_hash_kernel << <numP / blocksize + 1, blocksize >> > (numP, pos, d_hash, d_gcdata);
 	cudaDeviceSynchronize();
-	//printf("hash: \n");
-	//print_d_vec(numP, d_hash);
 	gpuErrchk(cudaGetLastError());
 	sort_hashed(pos);
 	gpuErrchk(cudaGetLastError());
@@ -135,7 +127,6 @@ void GridCount2d::update(glm::vec2* pos) {
 __global__ void fill_count_array_kernel(int numP, int* count_keys, int* __restrict__ hash, GridCount2d_data* __restrict__ gcdata) {
 	const int i = threadIdx.x + (blockDim.x * blockIdx.x);
 	if (i < numP) {
-		//printf("i: %d hash[i]: %d\n", i, hash[i]);
 		atomicAdd(&count_keys[hash[i]], 1);
 	}
 }
@@ -143,9 +134,7 @@ __global__ void fill_count_array_kernel(int numP, int* count_keys, int* __restri
 __global__ void compute_new_indices_kernel(int numP, int* ind, int* __restrict__ hash, int* cumulative_count_keys, GridCount2d_data* __restrict__ gcdata) {
 	const int i = threadIdx.x + (blockDim.x * blockIdx.x);
 	if (i < numP) {
-		//printf("i: %d ind[i]: %d cumulative_count_keys[hash[i]]: %d hash[i]: %d\n", i, ind[i], cumulative_count_keys[hash[i]], hash[i]);
 		ind[i] = atomicAdd(&cumulative_count_keys[hash[i]], -1) - 1;
-		//printf("i: %d ind[i]: %d cumulative_count_keys[hash[i]]: %d hash[i]: %d\n", i, ind[i], cumulative_count_keys[hash[i]], hash[i]);
 	}
 }
 
@@ -255,20 +244,19 @@ __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec2* __restric
 		int const num_x = gcdata->num_cells.x;
 		int const num_y = gcdata->num_cells.y;
 		const glm::vec2 pos_i = pos[i];
-		int hi = calcHash(pos_i, gcdata);
-		//printf("i: %d hi: %d pos[i]: %f %f %f\n", i, hi, pos_i.x, pos_i.y, pos_i.z);
+		glm::ivec2 hi = calc_hashxy(pos_i, gcdata);
 
 		for (int ddx = -1; ddx <= 1; ddx++) {
 			for (int ddy = -1; ddy <= 1; ddy++) {
-				int h = hi + ddx + ddy * num_x;
-				//h += (h > gcdata->tot_num_cells ? -gcdata->tot_num_cells : 0) + (h < 0 ? gcdata->tot_num_cells : 0); // border case. The particles in the border also check for neighbors in the oposite borders
-				if (h > gcdata->tot_num_cells || h < 0)continue;
-				//if(i==0)printf("i: %d h: %d num_cell_neighs: %d\n", i, h, cumulative_count_keys[h] + count_keys[h]);
+				glm::ivec2 hh = hi + glm::ivec2(ddx, ddy);
+				if (hh.x > gcdata->num_cells.x || hh.x < 0)continue;
+				if (hh.y > gcdata->num_cells.y || hh.y < 0)continue;
+				int h = calcHash(hh.x, hh.y, gcdata);
+
 				for (int j = cumulative_count_keys[h]; j < cumulative_count_keys[h] + count_keys[h]; j++) {
 					const glm::vec2 sub_vector = pos[j] - pos_i;
 
 					float r2 = glm::dot(sub_vector, sub_vector);
-					//printf("FRNN hi: %d h: %d i: %d j: %d r2: %f r: %f pos[i]: %f %f %f pos[j]: %f %f %f dist_vec: %f %f %f\n", hi, h, i, j, r2, sqrt(r2), pos_i.x, pos_i.y, pos_i.z, pos[j].x, pos[j].y, pos[j].z, sub_vector.x, sub_vector.y, sub_vector.z);
 					if (r2 <= rad2) f(i, j, sub_vector, sqrt(r2));
 				}
 			}
@@ -299,7 +287,6 @@ float GridCount2d::mean_num_particle_in_cell() {
 	thrust::device_ptr<int> has_particles_array = thrust::device_pointer_cast(d_has_particles);
 	thrust::device_ptr<int> num_particles_array = thrust::device_pointer_cast(d_num_particles);
 	thrust::device_ptr<int> max_val = thrust::max_element(num_particles_array, num_particles_array + h_gcdata->tot_num_cells);
-	//printf("Max num particles in a cell: %d\n", *max_val);
 	thrust::inclusive_scan(has_particles_array, has_particles_array + h_gcdata->tot_num_cells, has_particles_array);
 	thrust::inclusive_scan(num_particles_array, num_particles_array + h_gcdata->tot_num_cells, num_particles_array);
 	cudaDeviceSynchronize();
@@ -308,7 +295,6 @@ float GridCount2d::mean_num_particle_in_cell() {
 	cudaMemcpy(res + 1, &d_num_particles[h_gcdata->tot_num_cells - 1], sizeof(int), cudaMemcpyDeviceToHost);
 	cudaDeviceSynchronize();
 	float answer = (float)res[1] / (float)res[0];
-	//printf("Mean: %f tot_num_particles: %d num_cells: %d\n", answer, res[1], res[0]);
 	delete[] res;
 	return answer;
 }
