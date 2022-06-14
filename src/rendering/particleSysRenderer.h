@@ -153,7 +153,7 @@ struct ParticleSystemRenderer {
 
 	void renderps(int width, int height) {
 
-		projection = glm::perspective(glm::radians(fov), (float)width / (float)height, 0.1f, 300.0f);
+		projection = glm::perspective(glm::radians(fov), (float)width / (float)height, 0.1f, 3000.0f);
 
 		view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 		model = glm::scale(glm::mat4(1.0), glm::vec3(zoom, zoom, zoom));

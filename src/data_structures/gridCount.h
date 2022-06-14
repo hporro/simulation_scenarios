@@ -27,6 +27,8 @@ struct GridCount {
 	void update(glm::vec3* pos);
 	template<class Functor>
 	void apply_f_frnn(Functor& f, glm::vec3* pos, const float rad);
+	template<class Functor>
+	void culled_f_frnn(Functor& f, glm::vec3* pos, glm::vec3* vel, const float rad, float view_angle);
 	float mean_num_particle_in_cell();
 
 	// data
@@ -90,7 +92,7 @@ __device__ int calcHash(glm::vec3 p, GridCount_data* __restrict__ gcdata) {
 	int y = p.y / gcdata->cell_size.y;
 	int z = p.z / gcdata->cell_size.z;
 	//printf("p: %f %f %f\n", p.x, p.y, p.z);
-	return (z * gcdata->num_cells.y + y) * gcdata->num_cells.x + x;
+	return ((z * gcdata->num_cells.y + y) * gcdata->num_cells.x + x)%gcdata->tot_num_cells;
 }
 
 __global__ void calc_hash_kernel(int numP, glm::vec3* __restrict__ pos, int* hash, GridCount_data* __restrict__ gcdata) {
@@ -272,7 +274,42 @@ __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restric
 
 						float r2 = glm::dot(sub_vector, sub_vector);
 						//printf("FRNN hi: %d h: %d i: %d j: %d r2: %f r: %f pos[i]: %f %f %f pos[j]: %f %f %f dist_vec: %f %f %f\n", hi, h, i, j, r2, sqrt(r2), pos_i.x, pos_i.y, pos_i.z, pos[j].x, pos[j].y, pos[j].z, sub_vector.x, sub_vector.y, sub_vector.z);
-						if (r2 <= rad2) f(i, j, sub_vector, sqrt(r2));
+						if (r2 <= rad2) f(i, j, sub_vector, sqrtf(r2));
+					}
+				}
+			}
+		}
+	}
+}
+
+template<class Functor>
+__global__ void culled_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restrict__ pos, glm::vec3* __restrict__ vel, int* __restrict__ count_keys, int* __restrict__ cumulative_count_keys, float rad2, float view_angle, GridCount_data* gcdata) {
+	const int i = threadIdx.x + (blockDim.x * blockIdx.x);
+	if (i < numP) {
+		int const num_x = gcdata->num_cells.x;
+		int const num_y = gcdata->num_cells.y;
+		int const num_z = gcdata->num_cells.z;
+		const glm::vec3 pos_i = pos[i];
+		int hi = calcHash(pos_i, gcdata);
+		//printf("i: %d hi: %d pos[i]: %f %f %f\n", i, hi, pos_i.x, pos_i.y, pos_i.z);
+
+		for (int ddx = -1; ddx <= 1; ddx++) {
+			for (int ddy = -1; ddy <= 1; ddy++) {
+				for (int ddz = -1; ddz <= 1; ddz++) {
+
+					int h = hi + ddx + (ddz * num_y + ddy) * num_x;
+					//h += (h > gcdata->tot_num_cells ? -gcdata->tot_num_cells : 0) + (h < 0 ? gcdata->tot_num_cells : 0); // border case. The particles in the border also check for neighbors in the oposite borders
+					if (h > gcdata->tot_num_cells || h < 0)continue;
+					glm::vec3 cellWorldPos = (glm::vec3((int)(pos_i.x / gcdata->cell_size.x), (int)(pos_i.y / gcdata->cell_size.y), (int)(pos_i.z / gcdata->cell_size.z)) + glm::vec3(0.5)) * gcdata->cell_size.x;
+					const float r = glm::dot(glm::normalize(cellWorldPos - pos_i), glm::normalize(vel[i]));
+					if (acos(r) > view_angle) continue;
+					//if(i==0)printf("i: %d h: %d num_cell_neighs: %d\n", i, h, cumulative_count_keys[h] + count_keys[h]);
+					for (int j = cumulative_count_keys[h]; j < cumulative_count_keys[h] + count_keys[h]; j++) {
+						const glm::vec3 sub_vector = pos[j] - pos_i;
+
+						const float r2 = glm::dot(sub_vector, sub_vector);
+						//printf("FRNN hi: %d h: %d i: %d j: %d r2: %f r: %f pos[i]: %f %f %f pos[j]: %f %f %f dist_vec: %f %f %f\n", hi, h, i, j, r2, sqrt(r2), pos_i.x, pos_i.y, pos_i.z, pos[j].x, pos[j].y, pos[j].z, sub_vector.x, sub_vector.y, sub_vector.z);
+						if (r2 <= rad2) f(i, j, sub_vector, sqrtf(r2));
 					}
 				}
 			}
@@ -283,6 +320,12 @@ __global__ void apply_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restric
 template<class Functor>
 void GridCount::apply_f_frnn(Functor& f, glm::vec3* pos, const float rad) {
 	apply_f_frnn_gc_kernel<Functor> << <numP / blocksize + 1, blocksize >> > (f, numP, pos, d_count_keys, d_cumulative_count_keys, rad * rad, d_gcdata);
+	gpuErrchk(cudaGetLastError());
+}
+
+template<class Functor>
+void GridCount::culled_f_frnn(Functor& f, glm::vec3* pos, glm::vec3* vel, const float rad, float view_angle) {
+	culled_f_frnn_gc_kernel<Functor> << <numP / blocksize + 1, blocksize >> > (f, numP, pos, vel, d_count_keys, d_cumulative_count_keys, rad * rad, view_angle, d_gcdata);
 	gpuErrchk(cudaGetLastError());
 }
 

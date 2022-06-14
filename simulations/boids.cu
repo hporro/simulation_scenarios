@@ -8,7 +8,7 @@
 #include "../src/particle_sys/BoidsParticleSys.h"
 #include "../src/rendering/particleSysRenderer.h"
 
-constexpr int NUM_PARTICLES = 1000000;
+constexpr int NUM_PARTICLES = 100000;
 #define TWOPI 6.2831853072
 
 struct MyApp : public Application {
@@ -18,7 +18,7 @@ struct MyApp : public Application {
 	bool run_simulation = true;
 
 	MyApp(int width, int height, std::string title) : Application(width, height, std::move(title)),
-		psys(NUM_PARTICLES, glm::vec3(-50.0, -50.0, -50.0), glm::vec3(50.0, 50.0, 50.0), {}),
+		psys(NUM_PARTICLES, glm::vec3(-50.0f), glm::vec3(50.0f), {}),
 		psr(&psys) {}
 	void run() {
 		Timer dtTimer;
@@ -37,7 +37,7 @@ struct MyApp : public Application {
 			ImGui::Text("Visualization");
 			ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 			ImGui::DragInt("Simulation frames per frame", &sim_frames_per_frame, 1, 1, 20);
-			ImGui::DragFloat("Zoom", &psr.zoom, 0.01, 0.5, 3.0);
+			ImGui::DragFloat("Zoom", &psr.zoom, 0.01, 0.5, 7.0);
 			ImGui::DragFloat("Particle radius", &psr.radius, 0.1, 0.3, 50.0);
 			ImGui::DragFloat("X rotation", &psr.xrot, 0.01, -TWOPI, TWOPI);
 			ImGui::DragFloat("Y rotation", &psr.yrot, 0.01, -TWOPI, TWOPI);
@@ -46,13 +46,11 @@ struct MyApp : public Application {
 			ImGui::Text("Simulation");
 			ImGui::Checkbox("Running simulation", &run_simulation);
 			bool boids_changed = false;
-			boids_changed |= ImGui::DragFloat("Radius of separation", &psys.h_bss->RADA, 0.1, 0.0, 50.0);
-			boids_changed |= ImGui::DragFloat("Radius of cohesion", &psys.h_bss->RADB, 0.1, 0.0, 50.0);
-			boids_changed |= ImGui::DragFloat("Radius of alignement", &psys.h_bss->RADC, 0.1, 0.0, 50.0);
+			boids_changed |= ImGui::DragFloat("Radius of separation", &psys.h_bss->view_distance, 0.1, 0.0, 2.0);
 			boids_changed |= ImGui::DragFloat("Strength of separation", &psys.h_bss->A_FORCE, 0.1, 0.1, 10.0);
 			boids_changed |= ImGui::DragFloat("Strength of cohesion", &psys.h_bss->B_FORCE, 0.1, 0.1, 10.0);
 			boids_changed |= ImGui::DragFloat("Strength of alignement", &psys.h_bss->C_FORCE, 0.1, 0.1, 10.0);
-			boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 1.0, 1.0, 40.0);
+			boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 0.1, 0.0, 1.5);
 
 			ImGui::End();
 
