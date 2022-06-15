@@ -300,7 +300,7 @@ __global__ void culled_f_frnn_gc_kernel(Functor f, int numP, glm::vec3* __restri
 					int h = hi + ddx + (ddz * num_y + ddy) * num_x;
 					//h += (h > gcdata->tot_num_cells ? -gcdata->tot_num_cells : 0) + (h < 0 ? gcdata->tot_num_cells : 0); // border case. The particles in the border also check for neighbors in the oposite borders
 					if (h > gcdata->tot_num_cells || h < 0)continue;
-					glm::vec3 cellWorldPos = (glm::vec3((int)(pos_i.x / gcdata->cell_size.x), (int)(pos_i.y / gcdata->cell_size.y), (int)(pos_i.z / gcdata->cell_size.z)) + glm::vec3(0.5)) * gcdata->cell_size.x;
+					glm::vec3 cellWorldPos = (glm::vec3((int)(pos_i.x / gcdata->cell_size.x) + ddx, (int)(pos_i.y / gcdata->cell_size.y) + ddy, (int)(pos_i.z / gcdata->cell_size.z) + ddz) + glm::vec3(0.5)) * gcdata->cell_size.x;
 					const float r = glm::dot(glm::normalize(cellWorldPos - pos_i), glm::normalize(vel[i]));
 					if (acos(r) > view_angle) continue;
 					//if(i==0)printf("i: %d h: %d num_cell_neighs: %d\n", i, h, cumulative_count_keys[h] + count_keys[h]);
