@@ -3,119 +3,91 @@
 #include "particleSys.h"
 #include "../math/batea_math.cuh"
 #include "../data_structures/gridCount2d.h"
+#include <thrust/scan.h>
+#include <thrust/device_ptr.h>
 #include <algorithm>
 
 struct boids_sim_settings {
-	float RADA = 0.6; // separation
-	float RADB = 0.8; // cohesion
-	float RADC = 1.5; // alignement
+	float view_distance = 2.0;
+	float view_angle = 2.08;
 
-	float A_FORCE = 1.0;
-	float B_FORCE = 0.05;
-	float C_FORCE = 0.4;
+	float A_FORCE = 0.59 * 0.01; //separation
+	float B_FORCE = 1.87 * 0.03; //cohesion
+	float C_FORCE = 1.34 * 0.07; //alignement
 
-	float MAX_VEL = 0.25;
-	float MAX_FORCE = 0.13;
+	float MAX_VEL = 0.06;
+
+	float map_size = 100.0;
 };
 
 struct boids_neighbor_functor {
 	void resetForces() {
-		cudaMemset(separation, 0.0, numVertices * sizeof(glm::vec2));
-		cudaMemset(cohesion, 0.0, numVertices * sizeof(glm::vec2));
-		cudaMemset(alignement, 0.0, numVertices * sizeof(glm::vec2));
-		cudaMemset(num_A, 0, numVertices * sizeof(int));
-		cudaMemset(num_B, 0, numVertices * sizeof(int));
-		cudaMemset(num_C, 0, numVertices * sizeof(int));
-		//cudaMemset(vel, 0, numVertices * sizeof(glm::vec2));
+		cudaMemset(average_dir, 0.0, numVertices * sizeof(glm::vec2));
+		cudaMemset(average_pos, 0.0, numVertices * sizeof(glm::vec2));
+		cudaMemset(sep_force, 0.0, numVertices * sizeof(glm::vec2));
+		cudaMemset(num_neighbors, 0, numVertices * sizeof(int));
+		cudaMemset(d_clock_time, 0, numVertices * sizeof(int));
 	}
 	inline __device__ void operator()(const int& i, const int& j, const glm::vec2& dist_vec, const float& dist) {
-		if ((dist > EPSILON) && (dist < d_bss->RADA)) {
-			separation[i] -= dist_vec;
-			num_A[i] += 1;
+		if (i == j)return;
+		//clock_t start_time = clock();
+		const float r = glm::dot(glm::normalize(dist_vec), glm::normalize(vel[i]));
+		if ((dist < d_bss->view_distance) && (acos(r) <= d_bss->view_angle)) {
+			//if (dist < d_bss->view_distance) {
+			num_neighbors[i] += 1;
+			average_dir[i] += vel[j];
+			average_pos[i] += pos[j];
+			sep_force[i] += -dist_vec / dist;
 		}
-		if ((dist > EPSILON) && (dist < d_bss->RADB)) {
-			cohesion[i] += dist_vec;
-			num_B[i] += 1;
-		}
-		if ((dist > EPSILON) && (dist < d_bss->RADC)) {
-			alignement[i] += vel[j];
-			num_C[i] += 1;
-		}
+		//clock_t stop_time = clock();
+		//d_clock_time[i] += (int)(stop_time - start_time);
 	}
 	int numVertices;
 	// this class dont own this stuff
-	glm::vec2* separation, * cohesion, * alignement;
+	glm::vec2* average_dir, * average_pos, * sep_force;
 	glm::vec2* pos, * vel;
 	glm::vec2 offset;
-	int* num_A, * num_B, * num_C;
+	int* num_neighbors;
+	int* d_clock_time;
 	boids_sim_settings* d_bss;
 };
 
-__global__ void move_boids_w_walls(int numParticles, glm::vec2* pos, glm::vec2* vel, glm::vec2* min, glm::vec2* max, float dt,
-	glm::vec2* separation, glm::vec2* cohesion, glm::vec2* alignement, int* num_A, int* num_B, int* num_C, boids_sim_settings* bss) {
+__global__ void integrate(int numParticles, glm::vec2* pos, glm::vec2* vel, boids_sim_settings* bss) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i < numParticles) {
-		//for(int j=0;j<numParticles;j++){
-		//	if(i==j)continue;
-		//	glm::vec2 dist_vec = pos[i] - pos[j];
-		//	float dist = glm::length(dist_vec);
-		//	if ((dist > 0) && (dist < bss->RADA)) {
-		//		separation[i] += glm::normalize(dist_vec)/dist;
-		//		num_A[i] += 1;
-		//	}
-		//	if ((dist > 0) && (dist < bss->RADB)) {
-		//		cohesion[i] += pos[j];
-		//		num_B[i] += 1;
-		//	}
-		//	if ((dist > 0) && (dist < bss->RADC)) {
-		//		alignement[i] += vel[j];
-		//		num_C[i] += 1;
-		//	}
-		//}
+		vel[i] = glm::normalize(vel[i]);
+		pos[i] += bss->MAX_VEL * vel[i];
+	}
+}
 
-		//printf("i: %d separation[i]: %f %f %f\n", i, separation[i].x, separation[i].y, separation[i].z);
-		//printf("i: %d cohesion[i]: %f %f %f\n", i, cohesion[i].x, cohesion[i].y, cohesion[i].z);
-		//printf("i: %d alignement[i]: %f %f %f\n", i, alignement[i].x, alignement[i].y, alignement[i].z);
+__global__ void move_boids_w_walls(int numParticles, glm::vec2* pos, glm::vec2* vel, glm::vec2* min, glm::vec2* max, float dt,
+	glm::vec2* average_dir, glm::vec2* average_pos, glm::vec2* sep_force, int* num_neighbors, boids_sim_settings* bss) {
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	if (i < numParticles) {
 
-
-		// separation
-		if (num_A[i] > 0)separation[i] /= (float)num_A[i];
-		if (glm::length(separation[i]) > 0) {
-			separation[i] = glm::normalize(glm::normalize(separation[i]) * bss->MAX_VEL - vel[i]) * bss->MAX_FORCE;
+		vel[i] += sep_force[i] * bss->A_FORCE;
+		if (num_neighbors[i] > 0) {
+			//alignement
+			average_dir[i] /= (float)num_neighbors[i];
+			vel[i] += average_dir[i] * bss->C_FORCE;
+			//cohesion
+			average_pos[i] /= (float)num_neighbors[i];
+			vel[i] += -(pos[i] - average_pos[i]) * bss->B_FORCE;
 		}
 
-		// cohesion
-		if (num_B[i] > 0) if (glm::length(cohesion[i]) > 0.0) {
-			cohesion[i] /= (float)num_B[i];
-			cohesion[i] = glm::normalize(glm::normalize(cohesion[i]) * bss->MAX_VEL - vel[i]) * bss->MAX_FORCE;
+		const glm::vec2 np = pos[i] + (vel[i] * bss->MAX_VEL);
+		const float mp2 = bss->map_size * 0.5;
+		if (np.x < -mp2 || np.x > mp2 || np.y < -mp2 || np.y > mp2) {
+			const glm::vec2 to_center = glm::normalize(glm::vec2(0.0) - pos[i]);
+			vel[i] += to_center * 0.2f;
 		}
 
-		// alignement
-		if (num_C[i] > 0) if (glm::length(alignement[i]) > 0.0) {
-			alignement[i] /= (float)num_C[i];
-			alignement[i] = glm::normalize(glm::normalize(alignement[i]) * bss->MAX_VEL - vel[i]) * bss->MAX_FORCE;
-		}
-
-		glm::vec2 acel = separation[i] + cohesion[i] + alignement[i];
-
-		vel[i] += dt * acel;
-		//printf("i: %d vel[i]: %f %f %f\n", i, vel[i].x, vel[i].y, vel[i].z);
-
-		if (glm::length(vel[i]) > 0)
-			vel[i] = glm::normalize(vel[i]) * bss->MAX_VEL;
-		//printf("i: %d vel[i]: %f %f %f\n", i, vel[i].x, vel[i].y, vel[i].z);
-
-		if (pos[i].x + dt * vel[i].x > max[0].x)vel[i].x *= -1.0;
-		if (pos[i].y + dt * vel[i].y > max[0].y)vel[i].y *= -1.0;
-		if (pos[i].x + dt * vel[i].x < min[0].x)vel[i].x *= -1.0;
-		if (pos[i].y + dt * vel[i].y < min[0].y)vel[i].y *= -1.0;
-
-		pos[i] += dt * vel[i];
 	}
 }
 
 struct Boids2dParticleSys : public ParticleSys {
 
+	int numParticles;
 	boids_sim_settings* d_bss;
 	boids_sim_settings* h_bss;
 	boids_neighbor_functor cff;
@@ -126,14 +98,19 @@ struct Boids2dParticleSys : public ParticleSys {
 	glm::vec2* d_min, * d_max;
 	GridCount2d* m_grid;
 
-	glm::vec2* d_separation, * d_cohesion, * d_alignement;
-	int* d_num_A, * d_num_B, * d_num_C;
+	glm::vec2* d_average_dir, * d_average_pos, * d_sep_force;
+	int* d_num_neighbors, * d_clock_time;
 
 	struct cudaGraphicsResource* vbo_pos_cuda, * vbo_vel_cuda;
 
-	Boids2dParticleSys(int numParticles, glm::vec2 min, glm::vec2 max, boids_sim_settings bss) : ParticleSys(numParticles), h_min(min), h_max(max)
+	Boids2dParticleSys(int numParticles, glm::vec2 min, glm::vec2 max, boids_sim_settings bss) : numParticles(numParticles), ParticleSys(numParticles), h_min(min), h_max(max)
 	{
-		m_grid = new GridCount2d(numParticles, glm::vec2(-50.0), glm::vec2(1.5), glm::uvec2(70));
+		cudaMalloc((void**)&d_bss, sizeof(boids_sim_settings));
+		h_bss = new boids_sim_settings[1];
+		h_bss[0] = bss;
+		cudaMemcpy(d_bss, h_bss, sizeof(boids_sim_settings), cudaMemcpyHostToDevice);
+
+		m_grid = new GridCount2d(numParticles, min, glm::vec2(h_bss->view_distance), glm::ivec2(((max.x - min.x) / (int)h_bss->view_distance) + 1));
 		h_pos = new glm::vec2[numParticles];
 		h_vel = new glm::vec2[numParticles];
 
@@ -147,28 +124,22 @@ struct Boids2dParticleSys : public ParticleSys {
 
 		for (int i = 0; i < numParticles; i++) {
 			h_pos[i] = glm::vec2(distx(rng), disty(rng));
-			h_vel[i] = glm::vec2(dist01(rng), dist01(rng));
+			h_vel[i] = glm::normalize(glm::vec2(dist01(rng), dist01(rng)));
+			//h_vel[i] = glm::vec2(0.0f);
 		}
 
-		cudaMalloc((void**)&d_separation, numParticles * sizeof(glm::vec2));
-		cudaMalloc((void**)&d_cohesion, numParticles * sizeof(glm::vec2));
-		cudaMalloc((void**)&d_alignement, numParticles * sizeof(glm::vec2));
+		cudaMalloc((void**)&d_average_dir, numParticles * sizeof(glm::vec2));
+		cudaMalloc((void**)&d_average_pos, numParticles * sizeof(glm::vec2));
+		cudaMalloc((void**)&d_sep_force, numParticles * sizeof(glm::vec2));
 
-		cudaMalloc((void**)&d_num_A, numParticles * sizeof(int));
-		cudaMalloc((void**)&d_num_B, numParticles * sizeof(int));
-		cudaMalloc((void**)&d_num_C, numParticles * sizeof(int));
+		cudaMalloc((void**)&d_num_neighbors, numParticles * sizeof(int));
+		cudaMalloc((void**)&d_clock_time, numParticles * sizeof(int));
 
-		cudaMalloc((void**)&d_bss, sizeof(boids_sim_settings));
-		h_bss = new boids_sim_settings[1];
-		h_bss[0] = bss;
-		cudaMemcpy(d_bss, h_bss, sizeof(boids_sim_settings), cudaMemcpyHostToDevice);
-
-		cudaMemset(d_separation, 0.0, numParticles * sizeof(glm::vec2));
-		cudaMemset(d_cohesion, 0.0, numParticles * sizeof(glm::vec2));
-		cudaMemset(d_alignement, 0.0, numParticles * sizeof(glm::vec2));
-		cudaMemset(d_num_A, 0, numParticles * sizeof(int));
-		cudaMemset(d_num_B, 0, numParticles * sizeof(int));
-		cudaMemset(d_num_C, 0, numParticles * sizeof(int));
+		cudaMemset(d_average_dir, 0.0, numParticles * sizeof(glm::vec2));
+		cudaMemset(d_average_pos, 0.0, numParticles * sizeof(glm::vec2));
+		cudaMemset(d_sep_force, 0.0, numParticles * sizeof(glm::vec2));
+		cudaMemset(d_num_neighbors, 0, numParticles * sizeof(int));
+		cudaMemset(d_clock_time, 0, numParticles * sizeof(int));
 
 		cudaMalloc((void**)&d_min, sizeof(glm::vec2));
 		cudaMalloc((void**)&d_max, sizeof(glm::vec2));
@@ -176,9 +147,10 @@ struct Boids2dParticleSys : public ParticleSys {
 		cudaMemcpy(d_max, &h_max, sizeof(glm::vec2), cudaMemcpyHostToDevice);
 
 		cff.numVertices = numParticles;
-		cff.separation = d_separation; cff.cohesion = d_cohesion; cff.alignement = d_alignement;
-		cff.num_A = d_num_A; cff.num_B = d_num_B; cff.num_C = d_num_C;
+		cff.average_dir = d_average_dir; cff.average_pos = d_average_pos; cff.sep_force = d_sep_force;
+		cff.num_neighbors = d_num_neighbors;
 		cff.d_bss = d_bss;
+		cff.d_clock_time = d_clock_time;
 
 		glGenBuffers(1, &vbo_pos);
 		glGenBuffers(1, &vbo_vel);
@@ -202,13 +174,11 @@ struct Boids2dParticleSys : public ParticleSys {
 		delete[] h_pos;
 		delete[] h_vel;
 
-		cudaFree(d_separation);
-		cudaFree(d_cohesion);
-		cudaFree(d_alignement);
+		cudaFree(d_average_dir);
+		cudaFree(d_average_pos);
+		cudaFree(d_sep_force);
 
-		cudaFree(d_num_A);
-		cudaFree(d_num_B);
-		cudaFree(d_num_C);
+		cudaFree(d_num_neighbors);
 
 		cudaFree(d_bss);
 		delete[] h_bss;
@@ -237,11 +207,24 @@ struct Boids2dParticleSys : public ParticleSys {
 
 		cff.pos = d_pos;
 		cff.vel = d_vel;
-		m_grid->apply_f_frnn<boids_neighbor_functor>(cff, d_pos, 1.5);
+		integrate << <numBlocks, blocksize >> > (numParticles, d_pos, d_vel, d_bss);
+
+		//m_grid->culled_f_frnn<boids_neighbor_functor>(cff, d_pos, d_vel, h_bss->view_distance, h_bss->view_angle);
+		m_grid->apply_f_frnn<boids_neighbor_functor>(cff, d_pos, h_bss->view_distance);
 		cudaDeviceSynchronize();
 		LOG_TIMING("Grid query: {}", grid_timer.swap_time());
 
-		move_boids_w_walls << <numBlocks, blocksize >> > (numParticles, d_pos, d_vel, d_min, d_max, 0.05, d_separation, d_cohesion, d_alignement, d_num_A, d_num_B, d_num_C, d_bss);
+		// calc time on forces integration
+		//thrust::device_ptr<int> clock_timer = thrust::device_pointer_cast(d_clock_time);
+		//thrust::inclusive_scan(clock_timer, clock_timer + numParticles, clock_timer);
+		//cudaDeviceSynchronize();
+		//int* res = new int[1];
+		//cudaMemcpy(res, &d_clock_time[numParticles - 1], sizeof(int), cudaMemcpyDeviceToHost);
+		//cudaDeviceSynchronize();
+		// 1395 MHz is the default clock time in the GPU in the lab PC
+		//LOG_TIMING("Num cycles on force accumulation: {: 0.3f}ms Calc time: {}ms", ((float)res[0])/1395.0, grid_timer.swap_time());
+
+		move_boids_w_walls << <numBlocks, blocksize >> > (numParticles, d_pos, d_vel, d_min, d_max, 0.05, d_average_dir, d_average_pos, d_sep_force, d_num_neighbors, d_bss);
 		cudaDeviceSynchronize();
 		LOG_TIMING("Integration: {}", grid_timer.swap_time());
 

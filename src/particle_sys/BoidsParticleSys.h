@@ -30,7 +30,7 @@ struct boids_neighbor_functor {
 	}
 	inline __device__ void operator()(const int& i, const int& j, const glm::vec3& dist_vec, const float& dist) {
 		if (i == j)return;
-		clock_t start_time = clock();
+		//clock_t start_time = clock();
 		const float r = glm::dot(glm::normalize(dist_vec), glm::normalize(vel[i]));
 		if ((dist < d_bss->view_distance) && (acos(r) <= d_bss->view_angle)) {
 		//if (dist < d_bss->view_distance) {
@@ -39,8 +39,8 @@ struct boids_neighbor_functor {
 			average_pos[i] += pos[j];
 			sep_force[i] += -dist_vec / dist;
 		}
-		clock_t stop_time = clock();
-		d_clock_time[i] += (int)(stop_time - start_time);
+		//clock_t stop_time = clock();
+		//d_clock_time[i] += (int)(stop_time - start_time);
 	}
 	int numVertices;
 	// this class dont own this stuff
@@ -218,11 +218,11 @@ struct BoidsParticleSys : public ParticleSys {
 		//thrust::device_ptr<int> clock_timer = thrust::device_pointer_cast(d_clock_time);
 		//thrust::inclusive_scan(clock_timer, clock_timer + numParticles, clock_timer);
 		//cudaDeviceSynchronize();
-		int* res = new int[1];
-		cudaMemcpy(res, &d_clock_time[numParticles - 1], sizeof(int), cudaMemcpyDeviceToHost);
-		cudaDeviceSynchronize();
+		//int* res = new int[1];
+		//cudaMemcpy(res, &d_clock_time[numParticles - 1], sizeof(int), cudaMemcpyDeviceToHost);
+		//cudaDeviceSynchronize();
 		// 1395 MHz is the default clock time in the GPU in the lab PC
-		LOG_TIMING("Num cycles on force accumulation: {: 0.3f}ms Calc time: {}ms", ((float)res[0])/1395.0, grid_timer.swap_time());
+		//LOG_TIMING("Num cycles on force accumulation: {: 0.3f}ms Calc time: {}ms", ((float)res[0])/1395.0, grid_timer.swap_time());
 
 		move_boids_w_walls <<<numBlocks, blocksize >>> (numParticles, d_pos, d_vel, d_min, d_max, 0.05, d_average_dir, d_average_pos, d_sep_force, d_num_neighbors, d_bss);
 		cudaDeviceSynchronize();

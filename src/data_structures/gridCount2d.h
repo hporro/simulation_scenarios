@@ -84,7 +84,7 @@ GridCount2d::~GridCount2d() {
 }
 
 __device__ unsigned int calcHash(unsigned int x, unsigned int y, GridCount2d_data* __restrict__ gcdata) {
-	return y * gcdata->num_cells.x + x;
+	return (y * gcdata->num_cells.x + x) % gcdata->tot_num_cells;
 }
 
 __device__ glm::ivec2 calc_hashxy(glm::vec2 p, GridCount2d_data* __restrict__ gcdata) {

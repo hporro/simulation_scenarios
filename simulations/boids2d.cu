@@ -46,9 +46,7 @@ struct MyApp : public Application {
 			ImGui::Text("Simulation");
 			ImGui::Checkbox("Running simulation", &run_simulation);
 			bool boids_changed = false;
-			boids_changed |= ImGui::DragFloat("Radius of separation", &psys.h_bss->RADA, 0.1, 0.0, 50.0);
-			boids_changed |= ImGui::DragFloat("Radius of cohesion", &psys.h_bss->RADB, 0.1, 0.0, 50.0);
-			boids_changed |= ImGui::DragFloat("Radius of alignement", &psys.h_bss->RADC, 0.1, 0.0, 50.0);
+			boids_changed |= ImGui::DragFloat("Radius of separation", &psys.h_bss->view_distance, 0.1, 0.0, 50.0);
 			boids_changed |= ImGui::DragFloat("Strength of separation", &psys.h_bss->A_FORCE, 0.1, 0.1, 10.0);
 			boids_changed |= ImGui::DragFloat("Strength of cohesion", &psys.h_bss->B_FORCE, 0.1, 0.1, 10.0);
 			boids_changed |= ImGui::DragFloat("Strength of alignement", &psys.h_bss->C_FORCE, 0.1, 0.1, 10.0);
