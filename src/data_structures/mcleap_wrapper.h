@@ -31,7 +31,7 @@ struct triangulation2d {
 	// data
 	int numP;
 	int blocksize = 64;
-	MCleap::mcleap_mesh *m;
+	MCleap::mcleap_mesh *m, *m_copy;
 
 	int* d_visited;
 	MCleap::MCLEAP_REAL* d_diff;
@@ -52,6 +52,7 @@ triangulation2d<queueSize, visitedSizePerVertex>::~triangulation2d() {
 template<int queueSize, int visitedSizePerVertex>
 void triangulation2d<queueSize, visitedSizePerVertex>::build(MCleap::MCLEAP_VEC* pos) {
 	m = MCleap::build_triangulation_from_buffer(numP,(MCLEAP_REAL*)pos);
+	m_copy = MCleap::init_empty_mesh(m->num_vertices, m->num_edges, m->num_triangles);
 }
 
 template<int queueSize, int visitedSizePerVertex>
@@ -70,13 +71,15 @@ __global__ void calc_diff(int numP, MCleap::MCLEAP_VEC* a, MCleap::MCLEAP_VEC* b
 template<int queueSize, int visitedSizePerVertex>
 void triangulation2d<queueSize, visitedSizePerVertex>::update(MCleap::MCLEAP_VEC* pos) {
 	calc_diff <<<numP / blocksize + 1, blocksize >>> (numP, (m->d_vbo_v), (MCleap::MCLEAP_VEC*)pos, d_diff);
-	MCleap::move_vertices(m, d_diff);
+	MCleap::move_vertices(m, m_copy, d_diff);
 }
 
 template<int queueSize, int visitedSizePerVertex>
 template<class Functor>
 void triangulation2d<queueSize, visitedSizePerVertex>::apply_f_frnn(Functor& f, MCleap::MCLEAP_VEC* pos, const double rad) {
-	calcFRNN_frontier<Functor, queueSize, visitedSizePerVertex> <<<numP / blocksize + 1, blocksize>>> (f, m->d_vbo_v, m->d_t, m->d_mesh->he, m->d_mesh->v_to_he, d_visited, m->num_vertices, rad);
+	//calcFRNN_frontier<Functor, queueSize, visitedSizePerVertex> <<<numP / blocksize + 1, blocksize>>> (f, m->d_vbo_v, m->d_t, m->d_mesh->he, m->d_mesh->v_to_he, d_visited, m->num_vertices, rad);
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
 }
 
 template<int queueSize, int visitedSizePerVertex>

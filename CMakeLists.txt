@@ -7,6 +7,7 @@ SET(CMAKE_CXX_STANDARD 14)
 SET(CMAKE_CUDA_STANDARD 14)
 SET(CMAKE_CUDA_ARCHITECTURES 80)
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
+set_property(GLOBAL PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 
 add_definitions(-DGLEW_STATIC)
@@ -58,9 +59,10 @@ add_executable(${target_name} ${ARGN})
 target_link_libraries(${target_name}
 	PRIVATE BATEA_RENDER
 	PRIVATE BATEA_MATH
-	PUBLIC MCleap
+	PRIVATE MCleap
 )
-target_compile_options(${target_name} PRIVATE -Wall)
+
+#target_compile_options(${target_name} PRIVATE -Wall)
 target_include_directories(${target_name} PRIVATE lib/spdlog/include lib/imgui include lib/mcleap/include)
 endfunction()
 
@@ -70,11 +72,11 @@ make_simulation_target(boids2d simulations/boids2d.cu)
 
 # ------------- PLAYGROUND ----------------
 
-add_executable(playground playground.cu)
-target_link_libraries(playground
-	PRIVATE glm MCleap
-)
-target_include_directories(playground PRIVATE lib/glm lib/mcleap/include)
+#add_executable(playground playground.cu)
+#target_link_libraries(playground
+#	PRIVATE glm MCleap
+#)
+#target_include_directories(playground PRIVATE lib/glm lib/mcleap/include)
 
 # ------------- TESTS ----------------
 add_subdirectory(test)

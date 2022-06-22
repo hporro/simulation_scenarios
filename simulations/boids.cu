@@ -8,7 +8,7 @@
 #include "../src/particle_sys/BoidsParticleSys.h"
 #include "../src/rendering/particleSysRenderer.h"
 
-constexpr int NUM_PARTICLES = 100000;
+constexpr int NUM_PARTICLES = 1000000;
 #define TWOPI 6.2831853072
 
 struct MyApp : public Application {

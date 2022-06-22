@@ -33,7 +33,7 @@ struct GridCount {
 
 	// data
 	int numP;
-	int blocksize = 64;
+	int blocksize = 128;
 	GridCount_data* d_gcdata, * h_gcdata;
 	glm::vec3* pos_sorted, * vel_sorted;
 	int* d_hash;

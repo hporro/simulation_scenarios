@@ -2,7 +2,7 @@
 
 #include "particleSys.h"
 #include "../math/batea_math.cuh"
-#include "../data_structures/gridCount2d.h"
+#include "../data_structures/mcleap_wrapper.h"
 #include <thrust/scan.h>
 #include <thrust/device_ptr.h>
 #include <algorithm>
@@ -96,7 +96,7 @@ struct Boids2dParticleSys : public ParticleSys {
 	glm::vec2* d_pos, * h_pos;
 	glm::vec2  h_min, h_max;
 	glm::vec2* d_min, * d_max;
-	GridCount2d* m_grid;
+	triangulation2d<40,40>* m_grid;
 
 	glm::vec2* d_average_dir, * d_average_pos, * d_sep_force;
 	int* d_num_neighbors, * d_clock_time;
@@ -110,7 +110,7 @@ struct Boids2dParticleSys : public ParticleSys {
 		h_bss[0] = bss;
 		cudaMemcpy(d_bss, h_bss, sizeof(boids_sim_settings), cudaMemcpyHostToDevice);
 
-		m_grid = new GridCount2d(numParticles, min, glm::vec2(h_bss->view_distance), glm::ivec2(((max.x - min.x) / (int)h_bss->view_distance) + 1));
+		m_grid = new triangulation2d<40,40>(numParticles);
 		h_pos = new glm::vec2[numParticles];
 		h_vel = new glm::vec2[numParticles];
 
@@ -167,6 +167,8 @@ struct Boids2dParticleSys : public ParticleSys {
 		gpuErrchk(cudaGraphicsGLRegisterBuffer(&vbo_vel_cuda, vbo_vel, cudaGraphicsMapFlagsNone));
 		GLCHECKERR();
 
+		m_grid->build(h_pos);
+
 		LOG_EVENT("Boids particle system initialized with {} particles", numParticles);
 	}
 
@@ -203,15 +205,17 @@ struct Boids2dParticleSys : public ParticleSys {
 
 		m_grid->update(d_pos, d_vel);
 		cudaDeviceSynchronize();
+		gpuErrchk(cudaGetLastError());
 		LOG_TIMING("Grid update: {}", grid_timer.swap_time());
 
 		cff.pos = d_pos;
 		cff.vel = d_vel;
 		integrate << <numBlocks, blocksize >> > (numParticles, d_pos, d_vel, d_bss);
+		gpuErrchk(cudaGetLastError());
 
-		//m_grid->culled_f_frnn<boids_neighbor_functor>(cff, d_pos, d_vel, h_bss->view_distance, h_bss->view_angle);
 		m_grid->apply_f_frnn<boids_neighbor_functor>(cff, d_pos, h_bss->view_distance);
 		cudaDeviceSynchronize();
+		gpuErrchk(cudaGetLastError());
 		LOG_TIMING("Grid query: {}", grid_timer.swap_time());
 
 		// calc time on forces integration
