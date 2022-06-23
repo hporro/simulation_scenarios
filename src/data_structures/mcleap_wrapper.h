@@ -77,7 +77,7 @@ void triangulation2d<queueSize, visitedSizePerVertex>::update(MCleap::MCLEAP_VEC
 template<int queueSize, int visitedSizePerVertex>
 template<class Functor>
 void triangulation2d<queueSize, visitedSizePerVertex>::apply_f_frnn(Functor& f, MCleap::MCLEAP_VEC* pos, const double rad) {
-	//calcFRNN_frontier<Functor, queueSize, visitedSizePerVertex> <<<numP / blocksize + 1, blocksize>>> (f, m->d_vbo_v, m->d_t, m->d_mesh->he, m->d_mesh->v_to_he, d_visited, m->num_vertices, rad);
+	calcFRNN_frontier<Functor, queueSize, visitedSizePerVertex> <<<numP / blocksize + 1, blocksize>>> (f, m->d_vbo_v, m->d_t, m->d_mesh->he, m->d_mesh->v_to_he, d_visited, m->num_vertices, rad);
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
 }

@@ -14,7 +14,7 @@ struct ParticleSys {
 	int numParticles;
 	GLuint vbo_pos, vbo_vel; // Buffers with the position and velocity of the particles, for rendering porpouses
 	ParticleSys(int numParticles):numParticles(numParticles){}
-	virtual void update(float dt)=0;
+	virtual void update(float dt) = 0;
 };
 
 __global__ void move_shaker_w_walls(int numParticles, glm::vec3* pos, glm::vec3* vel, glm::vec3* min, glm::vec3* max, float dt) {

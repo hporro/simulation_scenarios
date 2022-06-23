@@ -30,58 +30,70 @@ struct boids_neighbor_functor {
 	}
 	inline __device__ void operator()(const int& i, const int& j, const glm::vec3& dist_vec, const float& dist) {
 		if (i == j)return;
-		//clock_t start_time = clock();
-		const float r = glm::dot(glm::normalize(dist_vec), glm::normalize(vel[i]));
+		clock_t start_time = clock();
+		const float r = glm::dot(dist_vec / dist, pos[i] / glm::length(pos[i]));
 		if ((dist < d_bss->view_distance) && (acos(r) <= d_bss->view_angle)) {
-		//if (dist < d_bss->view_distance) {
+			//if (dist < d_bss->view_distance) {
 			num_neighbors[i] += 1;
 			average_dir[i] += vel[j];
 			average_pos[i] += pos[j];
-			sep_force[i] += -dist_vec / dist;
+			sep_force[i] += -dist_vec / (dist * dist);
 		}
-		//clock_t stop_time = clock();
-		//d_clock_time[i] += (int)(stop_time - start_time);
+		clock_t stop_time = clock();
+		d_clock_time[i] += (int)(stop_time - start_time);
 	}
 	int numVertices;
 	// this class dont own this stuff
-	glm::vec3 *average_dir, *average_pos, *sep_force; 
-	glm::vec3 *pos, *vel;
+	glm::vec3* average_dir, * average_pos, * sep_force;
+	glm::vec3* pos, * vel;
 	glm::vec3 offset;
-	int *num_neighbors;
-	int *d_clock_time;
-	boids_sim_settings *d_bss;
+	int* num_neighbors;
+	int* d_clock_time;
+	boids_sim_settings* d_bss;
 };
 
-__global__ void integrate(int numParticles, glm::vec3 *pos, glm::vec3 *vel, boids_sim_settings* bss) {
+__global__ void integrate(int numParticles, glm::vec3* pos, glm::vec3* vel, boids_sim_settings* bss) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i < numParticles) {
-		vel[i] = glm::normalize(vel[i]);
 		pos[i] += bss->MAX_VEL * vel[i];
 	}
 }
 
 __global__ void move_boids_w_walls(int numParticles, glm::vec3* pos, glm::vec3* vel, glm::vec3* min, glm::vec3* max, float dt,
-	glm::vec3 *average_dir, glm::vec3 *average_pos, glm::vec3 *sep_force, int *num_neighbors, boids_sim_settings* bss) {
+	glm::vec3* average_dir, glm::vec3* average_pos, glm::vec3* sep_force, int* num_neighbors, boids_sim_settings* bss) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i < numParticles) {
 
 		vel[i] += sep_force[i] * bss->A_FORCE;
 		if (num_neighbors[i] > 0) {
 			//alignement
-			average_dir[i] /= (float)num_neighbors[i];
+			average_dir[i] /= num_neighbors[i];
 			vel[i] += average_dir[i] * bss->C_FORCE;
 			//cohesion
-			average_pos[i] /= (float)num_neighbors[i];
+			average_pos[i] /= num_neighbors[i];
 			vel[i] += -(pos[i] - average_pos[i]) * bss->B_FORCE;
 		}
+
+		//if (pos[i].x + bss->MAX_VEL * vel[i].x > max[0].x)pos[i] += bss->MAX_VEL * reflect(vel[i], glm::vec3(-1.0, 0.0, 0.0));
+		//if (pos[i].y + bss->MAX_VEL * vel[i].y > max[0].y)pos[i] += bss->MAX_VEL * reflect(vel[i], glm::vec3(0.0, -1.0, 0.0));
+		//if (pos[i].z + bss->MAX_VEL * vel[i].z > max[0].z)pos[i] += bss->MAX_VEL * reflect(vel[i], glm::vec3(0.0, 0.0, -1.0));
+		//if (pos[i].x + bss->MAX_VEL * vel[i].x < min[0].x)pos[i] += bss->MAX_VEL * reflect(vel[i], glm::vec3(1.0, 0.0, 0.0));
+		//if (pos[i].y + bss->MAX_VEL * vel[i].y < min[0].y)pos[i] += bss->MAX_VEL * reflect(vel[i], glm::vec3(0.0, 1.0, 0.0));
+		//if (pos[i].z + bss->MAX_VEL * vel[i].z < min[0].z)pos[i] += bss->MAX_VEL * reflect(vel[i], glm::vec3(0.0, 0.0, 1.0));
 
 		const glm::vec3 np = pos[i] + (vel[i] * bss->MAX_VEL);
 		const float mp2 = bss->map_size * 0.5;
 		if (np.x < -mp2 || np.x > mp2 || np.y < -mp2 || np.y > mp2 || np.z < -mp2 || np.z > mp2) {
 			const glm::vec3 to_center = glm::normalize(glm::vec3(0.0) - pos[i]);
-			vel[i] += to_center * 0.2;
+			vel[i] += to_center * 0.2f;
 		}
 
+		vel[i] = glm::normalize(vel[i]);
+
+		//if (glm::length(pos[i]) > bss->map_size/2.0) {
+		//	const glm::vec3 to_center = glm::normalize(glm::vec3(0.0f) - pos[i]);
+		//	vel[i] += to_center * 0.1;
+		//}
 	}
 }
 
@@ -92,15 +104,15 @@ struct BoidsParticleSys : public ParticleSys {
 	boids_sim_settings* h_bss;
 	boids_neighbor_functor cff;
 
-	glm::vec3 *d_vel, *h_vel;
-	glm::vec3 *d_pos, *h_pos;
-	glm::vec3  h_min,  h_max;
-	glm::vec3 *d_min, *d_max;
+	glm::vec3* d_vel, * h_vel;
+	glm::vec3* d_pos, * h_pos;
+	glm::vec3  h_min, h_max;
+	glm::vec3* d_min, * d_max;
 	GridCount* m_grid;
 
-	glm::vec3 *d_average_dir, *d_average_pos, *d_sep_force;
-	int *d_num_neighbors, *d_clock_time;
-	
+	glm::vec3* d_average_dir, * d_average_pos, * d_sep_force;
+	int* d_num_neighbors, * d_clock_time;
+
 	struct cudaGraphicsResource* vbo_pos_cuda, * vbo_vel_cuda;
 
 	BoidsParticleSys(int numParticles, glm::vec3 min, glm::vec3 max, boids_sim_settings bss) : numParticles(numParticles), ParticleSys(numParticles), h_min(min), h_max(max)
@@ -110,10 +122,10 @@ struct BoidsParticleSys : public ParticleSys {
 		h_bss[0] = bss;
 		cudaMemcpy(d_bss, h_bss, sizeof(boids_sim_settings), cudaMemcpyHostToDevice);
 
-		m_grid = new GridCount(numParticles, min, glm::vec3(h_bss->view_distance), glm::ivec3(((max.x-min.x)/(int)h_bss->view_distance)+1));
+		m_grid = new GridCount(numParticles, min, glm::vec3(h_bss->view_distance), glm::ivec3(((max.x - min.x) / (int)h_bss->view_distance) + 1));
 		h_pos = new glm::vec3[numParticles];
 		h_vel = new glm::vec3[numParticles];
-		
+
 		std::random_device dev;
 		std::mt19937 rng{ dev() };;
 		rng.seed(10);
@@ -179,7 +191,7 @@ struct BoidsParticleSys : public ParticleSys {
 		cudaFree(d_sep_force);
 
 		cudaFree(d_num_neighbors);
-			
+
 		cudaFree(d_bss);
 		delete[] h_bss;
 
@@ -201,13 +213,13 @@ struct BoidsParticleSys : public ParticleSys {
 
 		Timer grid_timer;
 
-		m_grid->update(d_pos,d_vel);
+		m_grid->update(d_pos, d_vel);
 		cudaDeviceSynchronize();
 		LOG_TIMING("Grid update: {}", grid_timer.swap_time());
 
 		cff.pos = d_pos;
 		cff.vel = d_vel;
-		integrate<<<numBlocks, blocksize >>>(numParticles, d_pos, d_vel, d_bss);
+		integrate << <numBlocks, blocksize >> > (numParticles, d_pos, d_vel, d_bss);
 
 		//m_grid->culled_f_frnn<boids_neighbor_functor>(cff, d_pos, d_vel, h_bss->view_distance, h_bss->view_angle);
 		m_grid->apply_f_frnn<boids_neighbor_functor>(cff, d_pos, h_bss->view_distance);
@@ -218,13 +230,13 @@ struct BoidsParticleSys : public ParticleSys {
 		//thrust::device_ptr<int> clock_timer = thrust::device_pointer_cast(d_clock_time);
 		//thrust::inclusive_scan(clock_timer, clock_timer + numParticles, clock_timer);
 		//cudaDeviceSynchronize();
-		//int* res = new int[1];
-		//cudaMemcpy(res, &d_clock_time[numParticles - 1], sizeof(int), cudaMemcpyDeviceToHost);
-		//cudaDeviceSynchronize();
+		int* res = new int[1];
+		cudaMemcpy(res, &d_clock_time[numParticles - 1], sizeof(int), cudaMemcpyDeviceToHost);
+		cudaDeviceSynchronize();
 		// 1395 MHz is the default clock time in the GPU in the lab PC
-		//LOG_TIMING("Num cycles on force accumulation: {: 0.3f}ms Calc time: {}ms", ((float)res[0])/1395.0, grid_timer.swap_time());
+		LOG_TIMING("Num cycles on force accumulation: {: 0.3f}ms Calc time: {}ms", ((float)res[0]) / 1395.0, grid_timer.swap_time());
 
-		move_boids_w_walls <<<numBlocks, blocksize >>> (numParticles, d_pos, d_vel, d_min, d_max, 0.05, d_average_dir, d_average_pos, d_sep_force, d_num_neighbors, d_bss);
+		move_boids_w_walls << <numBlocks, blocksize >> > (numParticles, d_pos, d_vel, d_min, d_max, 0.05, d_average_dir, d_average_pos, d_sep_force, d_num_neighbors, d_bss);
 		cudaDeviceSynchronize();
 		LOG_TIMING("Integration: {}", grid_timer.swap_time());
 

@@ -18,7 +18,7 @@ struct MyApp : public Application {
 	bool run_simulation = true;
 
 	MyApp(int width, int height, std::string title) : Application(width, height, std::move(title)),
-		psys(NUM_PARTICLES, glm::vec2(-50.0), glm::vec2(50.0), {}),
+		psys(NUM_PARTICLES, glm::dvec2(-50.0), glm::dvec2(50.0), {}),
 		psr(&psys) {}
 	void run() {
 		Timer dtTimer;
@@ -46,11 +46,11 @@ struct MyApp : public Application {
 			ImGui::Text("Simulation");
 			ImGui::Checkbox("Running simulation", &run_simulation);
 			bool boids_changed = false;
-			boids_changed |= ImGui::DragFloat("Radius of separation", &psys.h_bss->view_distance, 0.1, 0.0, 50.0);
-			boids_changed |= ImGui::DragFloat("Strength of separation", &psys.h_bss->A_FORCE, 0.1, 0.1, 10.0);
-			boids_changed |= ImGui::DragFloat("Strength of cohesion", &psys.h_bss->B_FORCE, 0.1, 0.1, 10.0);
-			boids_changed |= ImGui::DragFloat("Strength of alignement", &psys.h_bss->C_FORCE, 0.1, 0.1, 10.0);
-			boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 0.3, 0.1, 2.0);
+			//boids_changed |= ImGui::DragFloat("Radius of separation", &psys.h_bss->view_distance, 0.1, 0.0, 50.0);
+			//boids_changed |= ImGui::DragFloat("Strength of separation", &psys.h_bss->A_FORCE, 0.1, 0.1, 10.0);
+			//boids_changed |= ImGui::DragFloat("Strength of cohesion", &psys.h_bss->B_FORCE, 0.1, 0.1, 10.0);
+			//boids_changed |= ImGui::DragFloat("Strength of alignement", &psys.h_bss->C_FORCE, 0.1, 0.1, 10.0);
+			//boids_changed |= ImGui::DragFloat("Max vel", &psys.h_bss->MAX_VEL, 0.3, 0.1, 2.0);
 
 			ImGui::End();
 
