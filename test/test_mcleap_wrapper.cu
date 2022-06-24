@@ -9,6 +9,7 @@
 
 #include "glm/vec2.hpp"
 #include "glm/glm.hpp"
+#include "glm/gtc/type_ptr.hpp"
 
 #include "../src/gpu/gpuErrCheck.h"
 #include "../src/logging/Logging.h"
@@ -39,7 +40,7 @@ struct SaveNeighborsFunctor {
 	}
 	__device__ void operator()(const int& i, const int& j, const glm::dvec2 dist_vec, const double dist) {
 		if (i != j)if (dist <= *m_rad && dist > 0) {
-			if(i==4)printf("i: %d j: %d dist: %f\n", i, j, dist);
+			if(i==3)printf("i: %d j: %d dist: %f\n", i, j, dist);
 			int ind = i * (*m_max_neighbors) + m_num_neighbors[i];
 			if (ind < m_numP * (*m_max_neighbors))m_neighbors[ind] = j;
 			m_num_neighbors[i]++;
@@ -53,7 +54,7 @@ struct SaveNeighborsFunctor {
 };
 
 void lattice_test() {
-	int numP = 100;
+	int numP = 10000;
 	int max_neighs = 30;
 	float rad = 1.0;
 
@@ -63,9 +64,9 @@ void lattice_test() {
 	snfunctor->resetFunctor();
 
 	glm::dvec2* pos = new glm::dvec2[numP];
-	for (int x = 0; x < 10; x++) {
-		for (int y = 0; y < 10; y++) {
-			int i = x + 10 * +y;
+	for (int x = 0; x < 100; x++) {
+		for (int y = 0; y < 100; y++) {
+			int i = x + 100 * +y;
 			if (i > numP)continue;
 			pos[i] = glm::dvec2(x, y);
 		}
@@ -79,7 +80,7 @@ void lattice_test() {
 	pos[3].x = -1000.0;
 	pos[3].y = 1000.0;
 
-	gc.build((MCleap::MCLEAP_VEC*)pos);
+	gc.build(pos);
 
 	glm::dvec2* d_pos;
 	cudaMalloc((void**)&d_pos, numP * sizeof(glm::dvec2));
@@ -88,7 +89,7 @@ void lattice_test() {
 
 	//gc.update((MCleap::MCLEAP_VEC*)d_pos);
 	cudaDeviceSynchronize();
-	gc.apply_f_frnn<SaveNeighborsFunctor>(*snfunctor, (MCleap::MCLEAP_VEC*)d_pos, rad);
+	gc.apply_f_frnn<SaveNeighborsFunctor>(*snfunctor, d_pos, rad);
 	cudaDeviceSynchronize();
 
 	int* h_num_neighbors = new int[numP];
@@ -96,8 +97,10 @@ void lattice_test() {
 
 	cudaMemcpy(h_num_neighbors, snfunctor->m_num_neighbors, numP * sizeof(int), cudaMemcpyDeviceToHost);
 	cudaMemcpy(h_neighbors, snfunctor->m_neighbors, max_neighs * numP * sizeof(int), cudaMemcpyDeviceToHost);
-	cudaMemcpy(pos, d_pos, numP * sizeof(glm::dvec2), cudaMemcpyDeviceToHost);
+	cudaMemcpy(pos, gc.m->d_vbo_v, numP * sizeof(glm::dvec2), cudaMemcpyDeviceToHost);
 	cudaDeviceSynchronize();
+
+
 
 	int* res_num_neighs = new int[numP];
 
@@ -107,15 +110,15 @@ void lattice_test() {
 			if (i == j)continue;
 			glm::dvec2 dist_vec = pos[i] - pos[j];
 			float dist = glm::dot(dist_vec, dist_vec);
+			//if (i == 3)printf("i: %d j: %d dist: %f\n", i, j, sqrt(dist));
 			if (dist <= rad * rad) {
-				if(i==4)printf("i: %d j: %d dist: %f\n", i, j, sqrt(dist));
 				res_num_neighs[i]++;
 			}
 		}
 	}
 
 	for (int i = 0; i < numP; i++) {
-		printf("i: %d num_true: %d num_calc: %d\n", i, res_num_neighs[i], h_num_neighbors[i]);
+		//printf("i: %d num_true: %d num_calc: %d\n", i, res_num_neighs[i], h_num_neighbors[i]);
 		ASSERT_EQUALS(res_num_neighs[i], h_num_neighbors[i]);
 	}
 
