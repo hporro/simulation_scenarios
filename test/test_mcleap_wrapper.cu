@@ -39,7 +39,7 @@ struct SaveNeighborsFunctor {
 	}
 	__device__ void operator()(const int& i, const int& j, const glm::dvec2 dist_vec, const double dist) {
 		if (i != j)if (dist <= *m_rad && dist > 0) {
-			printf("i: %d j: %d dist: %f\n", i, j, dist);
+			if(i==4)printf("i: %d j: %d dist: %f\n", i, j, dist);
 			int ind = i * (*m_max_neighbors) + m_num_neighbors[i];
 			if (ind < m_numP * (*m_max_neighbors))m_neighbors[ind] = j;
 			m_num_neighbors[i]++;
@@ -53,7 +53,7 @@ struct SaveNeighborsFunctor {
 };
 
 void lattice_test() {
-	int numP = 1000;
+	int numP = 100;
 	int max_neighs = 30;
 	float rad = 1.0;
 
@@ -86,7 +86,7 @@ void lattice_test() {
 	cudaMemcpy(d_pos, pos, numP * sizeof(glm::dvec2), cudaMemcpyHostToDevice);
 	cudaDeviceSynchronize();
 
-	gc.update((MCleap::MCLEAP_VEC*)d_pos);
+	//gc.update((MCleap::MCLEAP_VEC*)d_pos);
 	cudaDeviceSynchronize();
 	gc.apply_f_frnn<SaveNeighborsFunctor>(*snfunctor, (MCleap::MCLEAP_VEC*)d_pos, rad);
 	cudaDeviceSynchronize();
@@ -108,6 +108,7 @@ void lattice_test() {
 			glm::dvec2 dist_vec = pos[i] - pos[j];
 			float dist = glm::dot(dist_vec, dist_vec);
 			if (dist <= rad * rad) {
+				if(i==4)printf("i: %d j: %d dist: %f\n", i, j, sqrt(dist));
 				res_num_neighs[i]++;
 			}
 		}

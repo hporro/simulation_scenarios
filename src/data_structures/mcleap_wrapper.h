@@ -17,7 +17,7 @@
 #include <algorithm>
 #include <iostream>
 
-template<int queueSize, int visitedSizePerVertex>
+template<int max_neighbors, int max_attracted>
 struct triangulation2d {
 	triangulation2d(int numP);
 	~triangulation2d();
@@ -33,30 +33,32 @@ struct triangulation2d {
 	int blocksize = 64;
 	MCleap::mcleap_mesh *m, *m_copy;
 
-	int* d_visited;
+	int* d_attracted, *d_neighbors;
 	MCleap::MCLEAP_REAL* d_diff;
 };
 
-template<int queueSize, int visitedSizePerVertex>
-triangulation2d<queueSize, visitedSizePerVertex>::triangulation2d(int numP) : numP(numP) {
+template<int max_neighbors, int max_attracted>
+triangulation2d<max_neighbors, max_attracted>::triangulation2d(int numP) : numP(numP) {
 	cudaMalloc(&d_diff, sizeof(MCleap::MCLEAP_REAL) * 2 * numP);
-	cudaMalloc(&d_visited, sizeof(int) * numP * visitedSizePerVertex);
+	cudaMalloc(&d_attracted, sizeof(int) * numP * max_attracted);
+	cudaMalloc(&d_neighbors, sizeof(int) * numP * max_neighbors);
 }
 
-template<int queueSize, int visitedSizePerVertex>
-triangulation2d<queueSize, visitedSizePerVertex>::~triangulation2d() {
+template<int max_neighbors, int max_attracted>
+triangulation2d<max_neighbors, max_attracted>::~triangulation2d() {
 	cudaFree(d_diff);
-	cudaFree(d_visited);
+	cudaFree(d_attracted);
+	cudaFree(d_neighbors);
 }
 
-template<int queueSize, int visitedSizePerVertex>
-void triangulation2d<queueSize, visitedSizePerVertex>::build(MCleap::MCLEAP_VEC* pos) {
+template<int max_neighbors, int max_attracted>
+void triangulation2d<max_neighbors, max_attracted>::build(MCleap::MCLEAP_VEC* pos) {
 	m = MCleap::build_triangulation_from_buffer(numP,(MCLEAP_REAL*)pos);
 	m_copy = MCleap::init_empty_mesh(m->num_vertices, m->num_edges, m->num_triangles);
 }
 
-template<int queueSize, int visitedSizePerVertex>
-void triangulation2d<queueSize, visitedSizePerVertex>::update(MCleap::MCLEAP_VEC* pos, MCleap::MCLEAP_VEC* vel) {
+template<int max_neighbors, int max_attracted>
+void triangulation2d<max_neighbors, max_attracted>::update(MCleap::MCLEAP_VEC* pos, MCleap::MCLEAP_VEC* vel) {
 	update(pos);
 }
 
@@ -68,21 +70,28 @@ __global__ void calc_diff(int numP, MCleap::MCLEAP_VEC* a, MCleap::MCLEAP_VEC* b
 	}
 }
 
-template<int queueSize, int visitedSizePerVertex>
-void triangulation2d<queueSize, visitedSizePerVertex>::update(MCleap::MCLEAP_VEC* pos) {
+template<int max_neighbors, int max_attracted>
+void triangulation2d<max_neighbors, max_attracted>::update(MCleap::MCLEAP_VEC* pos) {
 	calc_diff <<<numP / blocksize + 1, blocksize >>> (numP, (m->d_vbo_v), (MCleap::MCLEAP_VEC*)pos, d_diff);
 	MCleap::move_vertices(m, m_copy, d_diff);
 }
 
-template<int queueSize, int visitedSizePerVertex>
+template<int max_neighbors, int max_attracted>
 template<class Functor>
-void triangulation2d<queueSize, visitedSizePerVertex>::apply_f_frnn(Functor& f, MCleap::MCLEAP_VEC* pos, const double rad) {
-	calcFRNN_frontier<Functor, queueSize, visitedSizePerVertex> <<<numP / blocksize + 1, blocksize>>> (f, m->d_vbo_v, m->d_t, m->d_mesh->he, m->d_mesh->v_to_he, d_visited, m->num_vertices, rad);
+void triangulation2d<max_neighbors, max_attracted>::apply_f_frnn(Functor& f, MCleap::MCLEAP_VEC* pos, const double rad) {
+	//calcFRNN_frontier<Functor, max_neighbors, max_attracted> <<<numP / blocksize + 1, blocksize>>> (f, m->d_vbo_v, m->d_t, m->d_mesh->he, m->d_mesh->v_to_he, d_attracted, m->num_vertices, rad);
+	calc_neighbors_kernel<max_neighbors><<<numP / blocksize + 1, blocksize>>>(m->d_vbo_v, m->d_mesh->he, m->d_mesh->v_to_he, d_neighbors, m->num_vertices);
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+	calcAttracted_kernel<max_neighbors, max_attracted><<<numP / blocksize + 1, blocksize>>>(m->d_vbo_v, d_neighbors, d_attracted, m->num_vertices, rad);
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+	frnn_given_attracted<Functor, max_attracted><<<numP / blocksize + 1, blocksize>>>(f, m->d_vbo_v, d_attracted, m->num_vertices);
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
 }
 
-template<int queueSize, int visitedSizePerVertex>
-float triangulation2d<queueSize, visitedSizePerVertex>::mean_num_particle_in_cell() {
+template<int max_neighbors, int max_attracted>
+float triangulation2d<max_neighbors, max_attracted>::mean_num_particle_in_cell() {
 	return 0.0;
 }
