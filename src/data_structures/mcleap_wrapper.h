@@ -34,12 +34,12 @@ struct triangulation2d {
 	MCleap::mcleap_mesh *m, *m_copy;
 
 	int* d_attracted, *d_neighbors;
-	MCleap::MCLEAP_REAL* d_diff;
+	MCLEAP_REAL* d_diff;
 };
 
 template<int max_neighbors, int max_attracted>
 triangulation2d<max_neighbors, max_attracted>::triangulation2d(int numP) : numP(numP) {
-	cudaMalloc(&d_diff, sizeof(MCleap::MCLEAP_REAL) * 2 * numP);
+	cudaMalloc(&d_diff, sizeof(MCLEAP_REAL) * 2 * numP);
 	cudaMalloc(&d_attracted, sizeof(int) * numP * max_attracted);
 	cudaMalloc(&d_neighbors, sizeof(int) * numP * max_neighbors);
 }
@@ -64,7 +64,7 @@ void triangulation2d<max_neighbors, max_attracted>::update(glm::dvec2* pos, glm:
 	update(pos);
 }
 
-__global__ void calc_diff(int numP, MCleap::MCLEAP_VEC* a, MCleap::MCLEAP_VEC* b, MCleap::MCLEAP_REAL* diff) {
+__global__ void calc_diff(int numP, glm::dvec2* a, glm::dvec2* b, MCLEAP_REAL* diff) {
 	const int idx = threadIdx.x + (blockDim.x * blockIdx.x);
 	if (idx < numP) {
 		diff[idx*2+0] = a[idx].x - b[idx].x;
@@ -74,7 +74,7 @@ __global__ void calc_diff(int numP, MCleap::MCLEAP_VEC* a, MCleap::MCLEAP_VEC* b
 
 template<int max_neighbors, int max_attracted>
 void triangulation2d<max_neighbors, max_attracted>::update(glm::dvec2* pos) {
-	calc_diff <<<numP / blocksize + 1, blocksize >>> (numP, (m->d_vbo_v), (MCleap::MCLEAP_VEC*)pos, d_diff);
+	calc_diff <<<numP / blocksize + 1, blocksize >>> (numP, m->d_vbo_v, pos, d_diff);
 	MCleap::move_vertices(m, m_copy, d_diff);
 }
 

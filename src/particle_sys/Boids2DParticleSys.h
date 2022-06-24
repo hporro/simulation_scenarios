@@ -184,7 +184,7 @@ struct Boids2dParticleSys : public ParticleSys {
 		gpuErrchk(cudaGraphicsGLRegisterBuffer(&vbo_vel_cuda, vbo_vel, cudaGraphicsMapFlagsNone));
 		GLCHECKERR();
 
-		m_grid->build((MCleap::MCLEAP_VEC*)h_pos);
+		m_grid->build(h_pos);
 
 		LOG_EVENT("Boids particle system initialized with {} particles", numParticles);
 	}
@@ -220,7 +220,7 @@ struct Boids2dParticleSys : public ParticleSys {
 
 		Timer grid_timer;
 
-		m_grid->update((MCleap::MCLEAP_VEC*)d_pos, (MCleap::MCLEAP_VEC*)d_vel);
+		m_grid->update(d_pos, d_vel);
 		cudaDeviceSynchronize();
 		gpuErrchk(cudaGetLastError());
 		LOG_TIMING("Data structure update: {}", grid_timer.swap_time());
@@ -230,7 +230,7 @@ struct Boids2dParticleSys : public ParticleSys {
 		integrate << <numBlocks, blocksize >> > (numParticles, d_pos, d_vel, d_bss);
 		gpuErrchk(cudaGetLastError());
 
-		m_grid->apply_f_frnn<boids_neighbor_functor>(cff, (MCleap::MCLEAP_VEC*)d_pos, h_bss->view_distance);
+		m_grid->apply_f_frnn<boids_neighbor_functor>(cff, d_pos, h_bss->view_distance);
 		cudaDeviceSynchronize();
 		gpuErrchk(cudaGetLastError());
 		LOG_TIMING("Data structure query: {}", grid_timer.swap_time());
