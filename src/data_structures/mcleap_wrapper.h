@@ -56,7 +56,6 @@ void triangulation2d<max_neighbors, max_attracted>::build(glm::dvec2* pos) {
 	m = MCleap::build_triangulation_from_buffer(numP,(MCLEAP_REAL*)pos);
 	m_copy = MCleap::init_empty_mesh(m->num_vertices, m->num_edges, m->num_triangles);
 	cudaDeviceSynchronize();
-	//MCleap::print_mesh(m);
 }
 
 template<int max_neighbors, int max_attracted>
