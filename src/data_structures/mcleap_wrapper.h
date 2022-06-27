@@ -26,8 +26,11 @@ struct triangulation2d {
 	void build(glm::dvec2* pos);
 	template<class Functor>
 	void apply_f_frnn(Functor& f, glm::dvec2* pos, const double rad);
+	template<class Functor>
+	void apply_f_frnn_given_prev_info(Functor& f, glm::dvec2* pos, const double rad);
+	void calc_attracted(glm::dvec2* pos, const double rad);
 	float mean_num_particle_in_cell();
-
+	
 	// data
 	int numP;
 	int blocksize = 64;
@@ -78,20 +81,58 @@ void triangulation2d<max_neighbors, max_attracted>::update(glm::dvec2* pos) {
 }
 
 template<int max_neighbors, int max_attracted>
+void triangulation2d<max_neighbors, max_attracted>::calc_attracted(glm::dvec2* pos, const double rad) {
+	cudaDeviceSynchronize();
+	Timer tim;
+	calc_neighbors_kernel<max_neighbors> << <numP / blocksize + 1, blocksize >> > (pos, m->d_mesh->he, m->d_mesh->v_to_he, d_neighbors, m->num_vertices);
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+	LOG_TIMING("[triangulation 2d] calc neighbors: {}", tim.swap_time());
+	calcAttracted_kernel<max_neighbors, max_attracted> << <numP / blocksize + 1, blocksize >> > (pos, d_neighbors, d_attracted, m->num_vertices, rad);
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+	LOG_TIMING("[triangulation 2d] calc attracted: {}", tim.swap_time());
+}
+
+template<int max_neighbors, int max_attracted>
 template<class Functor>
 void triangulation2d<max_neighbors, max_attracted>::apply_f_frnn(Functor& f, glm::dvec2* pos, const double rad) {
-	//calcFRNN_frontier<Functor, max_neighbors, max_attracted> <<<numP / blocksize + 1, blocksize>>> (f, m->d_vbo_v, m->d_t, m->d_mesh->he, m->d_mesh->v_to_he, d_attracted, m->num_vertices, rad);
+
 	cudaDeviceSynchronize();
-	calc_neighbors_kernel<max_neighbors><<<numP / blocksize + 1, blocksize>>>(pos, m->d_mesh->he, m->d_mesh->v_to_he, d_neighbors, m->num_vertices);
-	cudaDeviceSynchronize();
-	gpuErrchk(cudaGetLastError());
-	calcAttracted_kernel<max_neighbors, max_attracted><<<numP / blocksize + 1, blocksize>>>(pos, d_neighbors, d_attracted, m->num_vertices, rad);
+	Timer tim;
+	calc_neighbors_kernel<max_neighbors> << <numP / blocksize + 1, blocksize >> > (pos, m->d_mesh->he, m->d_mesh->v_to_he, d_neighbors, m->num_vertices);
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
-	frnn_given_attracted<Functor, max_attracted><<<numP / blocksize + 1, blocksize>>>(f, pos, d_attracted, m->num_vertices);
+	LOG_TIMING("[triangulation 2d] calc neighbors: {}", tim.swap_time());
+	calcAttracted_kernel<max_neighbors, max_attracted> << <numP / blocksize + 1, blocksize >> > (pos, d_neighbors, d_attracted, m->num_vertices, rad);
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
+	LOG_TIMING("[triangulation 2d] calc attracted: {}", tim.swap_time());
+	frnn_given_attracted<Functor, max_attracted> << <numP / blocksize + 1, blocksize >> > (f, pos, d_attracted, m->num_vertices);
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+	LOG_TIMING("[triangulation 2d] apply functor: {}", tim.swap_time());
 }
+
+template<int max_neighbors, int max_attracted>
+template<class Functor>
+void triangulation2d<max_neighbors, max_attracted>::apply_f_frnn_given_prev_info(Functor& f, glm::dvec2* pos, const double rad) {
+	cudaDeviceSynchronize();
+	Timer tim;
+	calc_neighbors_kernel<max_neighbors> << <numP / blocksize + 1, blocksize >> > (pos, m->d_mesh->he, m->d_mesh->v_to_he, d_neighbors, m->num_vertices);
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+	LOG_TIMING("[triangulation 2d] calc neighbors: {}", tim.swap_time());
+	recalcAttracted_kernel<max_neighbors, max_attracted> << <numP / blocksize + 1, blocksize >> > (pos, d_neighbors, d_attracted, m->num_vertices, rad);
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+	LOG_TIMING("[triangulation 2d] calc reattracted: {}", tim.swap_time());
+	frnn_given_attracted<Functor, max_attracted> << <numP / blocksize + 1, blocksize >> > (f, pos, d_attracted, m->num_vertices);
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+	LOG_TIMING("[triangulation 2d] apply functor: {}", tim.swap_time());
+}
+
 
 template<int max_neighbors, int max_attracted>
 float triangulation2d<max_neighbors, max_attracted>::mean_num_particle_in_cell() {

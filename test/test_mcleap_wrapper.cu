@@ -89,7 +89,10 @@ void lattice_test() {
 
 	//gc.update((MCleap::MCLEAP_VEC*)d_pos);
 	cudaDeviceSynchronize();
-	gc.apply_f_frnn<SaveNeighborsFunctor>(*snfunctor, d_pos, rad);
+	gc.calc_attracted(d_pos, rad);
+	cudaDeviceSynchronize();
+	gc.apply_f_frnn_given_prev_info<SaveNeighborsFunctor>(*snfunctor, d_pos, rad);
+	
 	cudaDeviceSynchronize();
 
 	int* h_num_neighbors = new int[numP];
@@ -118,7 +121,7 @@ void lattice_test() {
 	}
 
 	for (int i = 0; i < numP; i++) {
-		//if(i==4)printf("i: %d num_true: %d num_calc: %d\n", i, res_num_neighs[i], h_num_neighbors[i]);
+		//printf("i: %d num_true: %d num_calc: %d\n", i, res_num_neighs[i], h_num_neighbors[i]);
 		ASSERT_EQUALS(res_num_neighs[i], h_num_neighbors[i]);
 	}
 
@@ -168,9 +171,16 @@ void packed_lattice_test() {
 	cudaDeviceSynchronize();
 
 	//gc.update(d_pos);
+	//cudaDeviceSynchronize();
+	//gc.apply_f_frnn<SaveNeighborsFunctor>(*snfunctor, d_pos, rad);
+	//cudaDeviceSynchronize();
+
 	cudaDeviceSynchronize();
-	gc.apply_f_frnn<SaveNeighborsFunctor>(*snfunctor, d_pos, rad);
+	gc.calc_attracted(d_pos, rad);
 	cudaDeviceSynchronize();
+	gc.apply_f_frnn_given_prev_info<SaveNeighborsFunctor>(*snfunctor, d_pos, rad);
+	cudaDeviceSynchronize();
+
 
 	int* h_num_neighbors = new int[numP];
 	int* h_neighbors = new int[numP * max_neighs];
@@ -240,9 +250,14 @@ void random_points_test() {
 	cudaMemcpy(d_pos, pos, numP * sizeof(glm::dvec2), cudaMemcpyHostToDevice);
 	cudaDeviceSynchronize();
 
-	gc.update(d_pos);
+	//gc.update(d_pos);
+	//cudaDeviceSynchronize();
+	//gc.apply_f_frnn<SaveNeighborsFunctor>(*snfunctor, d_pos, rad);
+	//cudaDeviceSynchronize();
 	cudaDeviceSynchronize();
-	gc.apply_f_frnn<SaveNeighborsFunctor>(*snfunctor, d_pos, rad);
+	gc.calc_attracted(d_pos, rad);
+	cudaDeviceSynchronize();
+	gc.apply_f_frnn_given_prev_info<SaveNeighborsFunctor>(*snfunctor, d_pos, rad);
 	cudaDeviceSynchronize();
 
 	int* h_num_neighbors = new int[numP];
@@ -325,11 +340,17 @@ void more_packed_lattice_test() {
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
 
-	gc.update(d_pos);
+	//gc.update(d_pos);
+	//cudaDeviceSynchronize();
+	//gc.apply_f_frnn<SaveNeighborsFunctor>(*snfunctor, d_pos, rad);
+	//cudaDeviceSynchronize();
+	//gpuErrchk(cudaGetLastError());
 	cudaDeviceSynchronize();
-	gc.apply_f_frnn<SaveNeighborsFunctor>(*snfunctor, d_pos, rad);
+	gc.calc_attracted(d_pos, rad);
 	cudaDeviceSynchronize();
-	gpuErrchk(cudaGetLastError());
+	gc.apply_f_frnn_given_prev_info<SaveNeighborsFunctor>(*snfunctor, d_pos, rad);
+	cudaDeviceSynchronize();
+
 
 	int* h_num_neighbors = new int[numP];
 	int* h_neighbors = new int[numP * max_neighs];

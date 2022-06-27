@@ -15,7 +15,7 @@ struct boids_sim_settings {
 	double B_FORCE = 1.87 * 0.03; //cohesion
 	double C_FORCE = 1.34 * 0.07; //alignement
 
-	double MAX_VEL = 0.06;
+	double MAX_VEL = 0.00006;
 
 	double map_size = 100.0;
 };
@@ -184,7 +184,14 @@ struct Boids2dParticleSys : public ParticleSys {
 		gpuErrchk(cudaGraphicsGLRegisterBuffer(&vbo_vel_cuda, vbo_vel, cudaGraphicsMapFlagsNone));
 		GLCHECKERR();
 
+
+		size_t bytes = 0;
+		gpuErrchk(cudaGraphicsMapResources(1, &vbo_pos_cuda, 0));
+		gpuErrchk(cudaGraphicsResourceGetMappedPointer((void**)&d_pos, &bytes, vbo_pos_cuda));
+
 		m_grid->build(h_pos);
+		m_grid->apply_f_frnn_given_prev_info<boids_neighbor_functor>(cff, d_pos, h_bss->view_distance);
+		gpuErrchk(cudaGraphicsUnmapResources(1, &vbo_pos_cuda, 0));
 
 		LOG_EVENT("Boids particle system initialized with {} particles", numParticles);
 	}
@@ -227,10 +234,8 @@ struct Boids2dParticleSys : public ParticleSys {
 
 		cff.pos = d_pos;
 		cff.vel = d_vel;
-		integrate << <numBlocks, blocksize >> > (numParticles, d_pos, d_vel, d_bss);
-		gpuErrchk(cudaGetLastError());
-
-		m_grid->apply_f_frnn<boids_neighbor_functor>(cff, d_pos, h_bss->view_distance);
+		
+		m_grid->apply_f_frnn_given_prev_info<boids_neighbor_functor>(cff, d_pos, h_bss->view_distance);
 		cudaDeviceSynchronize();
 		gpuErrchk(cudaGetLastError());
 		LOG_TIMING("Data structure query: {}", grid_timer.swap_time());
@@ -245,6 +250,9 @@ struct Boids2dParticleSys : public ParticleSys {
 		// 1395 MHz is the default clock time in the GPU in the lab PC
 		//LOG_TIMING("Num cycles on force accumulation: {: 0.3f}ms Calc time: {}ms", ((double)res[0])/1395.0, grid_timer.swap_time());
 
+		integrate << <numBlocks, blocksize >> > (numParticles, d_pos, d_vel, d_bss);
+		cudaDeviceSynchronize();
+		gpuErrchk(cudaGetLastError());
 		move_boids_w_walls << <numBlocks, blocksize >> > (numParticles, d_pos, d_vel, d_min, d_max, 0.05, d_average_dir, d_average_pos, d_sep_force, d_num_neighbors, d_bss);
 		cudaDeviceSynchronize();
 		LOG_TIMING("Integration: {}", grid_timer.swap_time());
