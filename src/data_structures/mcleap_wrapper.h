@@ -38,6 +38,7 @@ struct triangulation2d {
 
 	int* d_attracted, *d_neighbors;
 	MCLEAP_REAL* d_diff;
+	int* d_num_attracted;
 };
 
 template<int max_neighbors, int max_attracted>
@@ -45,6 +46,7 @@ triangulation2d<max_neighbors, max_attracted>::triangulation2d(int numP) : numP(
 	cudaMalloc(&d_diff, sizeof(MCLEAP_REAL) * 2 * numP);
 	cudaMalloc(&d_attracted, sizeof(int) * numP * max_attracted);
 	cudaMalloc(&d_neighbors, sizeof(int) * numP * max_neighbors);
+	cudaMalloc(&d_num_attracted, sizeof(int) * numP);
 }
 
 template<int max_neighbors, int max_attracted>
@@ -52,6 +54,7 @@ triangulation2d<max_neighbors, max_attracted>::~triangulation2d() {
 	cudaFree(d_diff);
 	cudaFree(d_attracted);
 	cudaFree(d_neighbors);
+	//cudaFree(d_num_attracted);
 }
 
 template<int max_neighbors, int max_attracted>
@@ -76,15 +79,22 @@ __global__ void calc_diff(int numP, glm::dvec2* a, glm::dvec2* b, MCLEAP_REAL* d
 
 template<int max_neighbors, int max_attracted>
 void triangulation2d<max_neighbors, max_attracted>::update(glm::dvec2* pos) {
+	Timer tim;
 	calc_diff <<<numP / blocksize + 1, blocksize >>> (numP, m->d_vbo_v, pos, d_diff);
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+	LOG_TIMING("[triangulation 2d] calcdiff: {}", tim.swap_time());
 	MCleap::move_vertices(m, m_copy, d_diff);
+	cudaDeviceSynchronize();
+	gpuErrchk(cudaGetLastError());
+	LOG_TIMING("[triangulation 2d] move vertices: {}", tim.swap_time());
 }
 
 template<int max_neighbors, int max_attracted>
 void triangulation2d<max_neighbors, max_attracted>::calc_attracted(glm::dvec2* pos, const double rad) {
 	cudaDeviceSynchronize();
 	Timer tim;
-	calc_neighbors_kernel<max_neighbors> << <numP / blocksize + 1, blocksize >> > (pos, m->d_mesh->he, m->d_mesh->v_to_he, d_neighbors, m->num_vertices);
+	calc_neighbors_kernel<max_neighbors> << <numP / blocksize + 1, blocksize >> > (pos, m->d_mesh->he, m->d_mesh->v_to_he, d_neighbors, m->num_vertices, rad);
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
 	LOG_TIMING("[triangulation 2d] calc neighbors: {}", tim.swap_time());
@@ -100,7 +110,7 @@ void triangulation2d<max_neighbors, max_attracted>::apply_f_frnn(Functor& f, glm
 
 	cudaDeviceSynchronize();
 	Timer tim;
-	calc_neighbors_kernel<max_neighbors> << <numP / blocksize + 1, blocksize >> > (pos, m->d_mesh->he, m->d_mesh->v_to_he, d_neighbors, m->num_vertices);
+	calc_neighbors_kernel<max_neighbors> << <numP / blocksize + 1, blocksize >> > (pos, m->d_mesh->he, m->d_mesh->v_to_he, d_neighbors, m->num_vertices, rad);
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
 	LOG_TIMING("[triangulation 2d] calc neighbors: {}", tim.swap_time());
@@ -119,7 +129,7 @@ template<class Functor>
 void triangulation2d<max_neighbors, max_attracted>::apply_f_frnn_given_prev_info(Functor& f, glm::dvec2* pos, const double rad) {
 	cudaDeviceSynchronize();
 	Timer tim;
-	calc_neighbors_kernel<max_neighbors> << <numP / blocksize + 1, blocksize >> > (pos, m->d_mesh->he, m->d_mesh->v_to_he, d_neighbors, m->num_vertices);
+	calc_neighbors_kernel<max_neighbors> << <numP / blocksize + 1, blocksize >> > (pos, m->d_mesh->he, m->d_mesh->v_to_he, d_neighbors, m->num_vertices, rad);
 	cudaDeviceSynchronize();
 	gpuErrchk(cudaGetLastError());
 	LOG_TIMING("[triangulation 2d] calc neighbors: {}", tim.swap_time());
@@ -133,8 +143,24 @@ void triangulation2d<max_neighbors, max_attracted>::apply_f_frnn_given_prev_info
 	LOG_TIMING("[triangulation 2d] apply functor: {}", tim.swap_time());
 }
 
+template<int max_attracted>
+__global__ void get_num_attracted_kernel(int numP, int* attracted, int* num_attracted) {
+	const int i = blockIdx.x * blockDim.x + threadIdx.x;
+	if (i >= numP)return;
+	num_attracted[i] = attracted[i * max_attracted] - 1;
+	printf("i: %d num_attracted: %d\n", i, num_attracted[i]);
+}
 
 template<int max_neighbors, int max_attracted>
 float triangulation2d<max_neighbors, max_attracted>::mean_num_particle_in_cell() {
-	return 0.0;
+	get_num_attracted_kernel<max_attracted><<<numP / blocksize + 1, blocksize>>>(numP, d_attracted, d_num_attracted);
+	thrust::device_ptr<int> num_attracted_array = thrust::device_pointer_cast(d_num_attracted);
+	thrust::inclusive_scan(num_attracted_array, num_attracted_array + numP, num_attracted_array);
+	cudaDeviceSynchronize();
+	int* res = new int[1];
+	cudaMemcpy(res, &d_num_attracted[numP-1], sizeof(int), cudaMemcpyDeviceToHost);
+	cudaDeviceSynchronize();
+	float answer = (float)res[0] / (float)numP;
+	delete[] res;
+	return answer;
 }

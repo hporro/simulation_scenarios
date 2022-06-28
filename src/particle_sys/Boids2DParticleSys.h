@@ -15,7 +15,7 @@ struct boids_sim_settings {
 	double B_FORCE = 1.87 * 0.03; //cohesion
 	double C_FORCE = 1.34 * 0.07; //alignement
 
-	double MAX_VEL = 0.00006;
+	double MAX_VEL = 0.000006;
 
 	double map_size = 100.0;
 };
@@ -235,7 +235,7 @@ struct Boids2dParticleSys : public ParticleSys {
 		cff.pos = d_pos;
 		cff.vel = d_vel;
 		
-		m_grid->apply_f_frnn_given_prev_info<boids_neighbor_functor>(cff, d_pos, h_bss->view_distance);
+		m_grid->apply_f_frnn<boids_neighbor_functor>(cff, d_pos, h_bss->view_distance);
 		cudaDeviceSynchronize();
 		gpuErrchk(cudaGetLastError());
 		LOG_TIMING("Data structure query: {}", grid_timer.swap_time());
