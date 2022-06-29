@@ -96,7 +96,7 @@ struct Boids2dParticleSys : public ParticleSys {
 	glm::dvec2* d_pos, * h_pos;
 	glm::dvec2  h_min, h_max;
 	glm::dvec2* d_min, * d_max;
-	triangulation2d<20,20>* m_grid;
+	triangulation2d<100,100>* m_grid;
 
 	glm::dvec2* d_average_dir, * d_average_pos, * d_sep_force;
 	int* d_num_neighbors, * d_clock_time;
@@ -110,7 +110,7 @@ struct Boids2dParticleSys : public ParticleSys {
 		h_bss[0] = bss;
 		cudaMemcpy(d_bss, h_bss, sizeof(boids_sim_settings), cudaMemcpyHostToDevice);
 
-		m_grid = new triangulation2d<20,20>(numParticles);
+		m_grid = new triangulation2d<100,100>(numParticles);
 		h_pos = new glm::dvec2[numParticles];
 		h_vel = new glm::dvec2[numParticles];
 

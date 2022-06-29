@@ -148,12 +148,14 @@ __global__ void get_num_attracted_kernel(int numP, int* attracted, int* num_attr
 	const int i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i >= numP)return;
 	num_attracted[i] = attracted[i * max_attracted] - 1;
-	printf("i: %d num_attracted: %d\n", i, num_attracted[i]);
+	//printf("i: %d num_attracted: %d\n", i, num_attracted[i]);
 }
 
 template<int max_neighbors, int max_attracted>
 float triangulation2d<max_neighbors, max_attracted>::mean_num_particle_in_cell() {
 	get_num_attracted_kernel<max_attracted><<<numP / blocksize + 1, blocksize>>>(numP, d_attracted, d_num_attracted);
+	gpuErrchk(cudaGetLastError());
+	cudaDeviceSynchronize();
 	thrust::device_ptr<int> num_attracted_array = thrust::device_pointer_cast(d_num_attracted);
 	thrust::inclusive_scan(num_attracted_array, num_attracted_array + numP, num_attracted_array);
 	cudaDeviceSynchronize();
@@ -163,4 +165,5 @@ float triangulation2d<max_neighbors, max_attracted>::mean_num_particle_in_cell()
 	float answer = (float)res[0] / (float)numP;
 	delete[] res;
 	return answer;
+	return 0.0f;
 }
