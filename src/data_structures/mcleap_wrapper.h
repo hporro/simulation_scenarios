@@ -54,7 +54,7 @@ triangulation2d<max_neighbors, max_attracted>::~triangulation2d() {
 	cudaFree(d_diff);
 	cudaFree(d_attracted);
 	cudaFree(d_neighbors);
-	//cudaFree(d_num_attracted);
+	cudaFree(d_num_attracted);
 }
 
 template<int max_neighbors, int max_attracted>
