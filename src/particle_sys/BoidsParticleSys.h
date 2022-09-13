@@ -31,13 +31,13 @@ struct boids_neighbor_functor {
 	inline __device__ void operator()(const int& i, const int& j, const glm::vec3& dist_vec, const float& dist) {
 		if (i == j)return;
 		clock_t start_time = clock();
-		const float r = glm::dot(dist_vec / dist, pos[i] / glm::length(pos[i]));
+		const float r = glm::dot(glm::normalize(dist_vec), glm::normalize(vel[i]));
 		if ((dist < d_bss->view_distance) && (acos(r) <= d_bss->view_angle)) {
 			//if (dist < d_bss->view_distance) {
 			num_neighbors[i] += 1;
 			average_dir[i] += vel[j];
 			average_pos[i] += pos[j];
-			sep_force[i] += -dist_vec / (dist * dist);
+			sep_force[i] += -dist_vec / dist;
 		}
 		clock_t stop_time = clock();
 		d_clock_time[i] += (int)(stop_time - start_time);
@@ -55,6 +55,7 @@ struct boids_neighbor_functor {
 __global__ void integrate(int numParticles, glm::vec3* pos, glm::vec3* vel, boids_sim_settings* bss) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i < numParticles) {
+		vel[i] = glm::normalize(vel[i]);
 		pos[i] += bss->MAX_VEL * vel[i];
 	}
 }
@@ -67,19 +68,12 @@ __global__ void move_boids_w_walls(int numParticles, glm::vec3* pos, glm::vec3* 
 		vel[i] += sep_force[i] * bss->A_FORCE;
 		if (num_neighbors[i] > 0) {
 			//alignement
-			average_dir[i] /= num_neighbors[i];
+			average_dir[i] /= (float)num_neighbors[i];
 			vel[i] += average_dir[i] * bss->C_FORCE;
 			//cohesion
-			average_pos[i] /= num_neighbors[i];
+			average_pos[i] /= (float)num_neighbors[i];
 			vel[i] += -(pos[i] - average_pos[i]) * bss->B_FORCE;
 		}
-
-		//if (pos[i].x + bss->MAX_VEL * vel[i].x > max[0].x)pos[i] += bss->MAX_VEL * reflect(vel[i], glm::vec3(-1.0, 0.0, 0.0));
-		//if (pos[i].y + bss->MAX_VEL * vel[i].y > max[0].y)pos[i] += bss->MAX_VEL * reflect(vel[i], glm::vec3(0.0, -1.0, 0.0));
-		//if (pos[i].z + bss->MAX_VEL * vel[i].z > max[0].z)pos[i] += bss->MAX_VEL * reflect(vel[i], glm::vec3(0.0, 0.0, -1.0));
-		//if (pos[i].x + bss->MAX_VEL * vel[i].x < min[0].x)pos[i] += bss->MAX_VEL * reflect(vel[i], glm::vec3(1.0, 0.0, 0.0));
-		//if (pos[i].y + bss->MAX_VEL * vel[i].y < min[0].y)pos[i] += bss->MAX_VEL * reflect(vel[i], glm::vec3(0.0, 1.0, 0.0));
-		//if (pos[i].z + bss->MAX_VEL * vel[i].z < min[0].z)pos[i] += bss->MAX_VEL * reflect(vel[i], glm::vec3(0.0, 0.0, 1.0));
 
 		const glm::vec3 np = pos[i] + (vel[i] * bss->MAX_VEL);
 		const float mp2 = bss->map_size * 0.5;
@@ -88,12 +82,6 @@ __global__ void move_boids_w_walls(int numParticles, glm::vec3* pos, glm::vec3* 
 			vel[i] += to_center * 0.2f;
 		}
 
-		vel[i] = glm::normalize(vel[i]);
-
-		//if (glm::length(pos[i]) > bss->map_size/2.0) {
-		//	const glm::vec3 to_center = glm::normalize(glm::vec3(0.0f) - pos[i]);
-		//	vel[i] += to_center * 0.1;
-		//}
 	}
 }
 
